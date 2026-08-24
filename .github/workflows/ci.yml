@@ -1,0 +1,77 @@
+name: CIAI CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Reject generated output and private material
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '(^|/)(bin|obj|target|\.vs|\.idea|logs)/'; then
+            echo "Generated or IDE output is tracked."
+            exit 1
+          fi
+          if git ls-files | grep -Ei '\.(pfx|p12|jks|keystore|key|pem|cer|crt|dll|exe)$'; then
+            echo "Certificate, private key, vendor binary, or executable is tracked."
+            exit 1
+          fi
+      - name: Validate JSON Schema
+        run: python -m json.tool schemas/ciai-2.0.schema.json > /dev/null
+      - name: Validate OpenAPI shape
+        run: |
+          ruby -e 'require "yaml"; d=YAML.safe_load(File.read("openapi/ciai-2.0.yaml"), aliases: true); expected=%w[/EnterAndExit /Function /Get /HeartBeat /Info /Operation /Set]; abort "OpenAPI version must be 3.1.0" unless d["openapi"] == "3.1.0"; abort "Unexpected CIAI endpoint set" unless d.fetch("paths").keys.sort == expected.sort'
+
+  dotnet-contract:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet restore CiaiControllerSDK.ContractTests/CiaiControllerSDK.ContractTests.csproj
+      - run: dotnet build CiaiControllerSDK/CiaiControllerSDK.csproj -c Release --no-restore
+      - run: dotnet run --project CiaiControllerSDK.ContractTests/CiaiControllerSDK.ContractTests.csproj -c Release --no-restore
+      - run: dotnet build examples/csharp-temperature/Ciai.Example.Temperature.csproj -c Release
+      - run: dotnet pack CiaiControllerSDK/CiaiControllerSDK.csproj -c Release --no-build --output artifacts
+      - run: dotnet pack CiaiControllerSDK.LegacyAdapter/CiaiControllerSDK.LegacyAdapter.csproj -c Release --output artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-packages
+          path: artifacts/*.*nupkg
+
+  java-contract:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ["8", "11"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      - run: .\mvnw.cmd --batch-mode --no-transfer-progress verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: java-packages-jdk-${{ matrix.java }}
+          path: |
+            CiaiControllerSDKForJava/target/*.jar
+            !CiaiControllerSDKForJava/target/original-*.jar

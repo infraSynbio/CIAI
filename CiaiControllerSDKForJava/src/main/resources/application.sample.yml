@@ -1,0 +1,101 @@
+# Copy to application.yml. HTTP is the safe local-development default.
+server:
+  host: "0.0.0.0"
+  port: 12345
+  useHttps: false
+  maxConcurrentRequests: 100
+  maxRequestBodyBytes: 1048576
+  functionQueueCapacity: 100
+  idempotencyCapacity: 10000
+  shutdownTimeoutMs: 30000
+
+  # HTTPS / mTLS template. Uncomment only when useHttps is true.
+  # certificate:
+  #   path: "./certs/server.pfx"
+  #   password: "${CIAI_SERVER_CERT_PASSWORD}"
+  #   type: "PKCS12"
+  #   alias: "server"
+  # trustStore:
+  #   path: "./certs/client-trust.pfx"
+  #   password: "${CIAI_TRUST_STORE_PASSWORD}"
+  #   type: "PKCS12"
+  # ssl:
+  #   # TLSv1.2 works on the supported Java 8 baseline. Use TLSv1.3 only
+  #   # when every deployed runtime and operating system supports it.
+  #   protocol: "TLSv1.2"
+  #   enabledProtocols:
+  #     - "TLSv1.2"
+  # clientAuth:
+  #   enabled: true
+  #   mode: "need" # need=required, want=optional, none=disabled
+
+callback:
+  enabled: false
+  url: ""
+  timeoutMs: 30000
+
+device:
+  deviceId: "my-device-001"
+
+  # A driver that directly wraps a DLL/API can use DLL without a connection.
+  communicationType: "DLL"
+  deviceCallResources: 1
+  deviceCallTimeoutMs: 30000
+
+  # For one TCP/HTTP/serial connection, replace communicationType and uncomment
+  # only the corresponding block. TCP and serial are always serialized by the SDK.
+  # communicationType: "TCP"
+  # tcp:
+  #   host: "192.168.1.100"
+  #   port: 5000
+  #   connectTimeoutMs: 5000
+  #   readTimeoutMs: 10000
+  #   writeTimeoutMs: 5000
+  #
+  # communicationType: "HTTP"
+  # http:
+  #   baseUrl: "http://192.168.1.100/api"
+  #   timeoutMs: 30000
+  #   headers:
+  #     Authorization: "Bearer ${VENDOR_TOKEN}"
+  #
+  # communicationType: "Serial"
+  # serial:
+  #   port: "COM3"
+  #   baudRate: 9600
+  #   dataBits: 8
+  #   stopBits: 1
+  #   parity: "none"
+  #   flowControl: "none"
+  #   dtrEnable: false
+  #   rtsEnable: false
+  #   discardInputBeforeWrite: false
+  #   readTimeoutMs: 5000
+  #   writeTimeoutMs: 5000
+  #   encoding: "utf-8"
+
+  # Use named connections only for devices with multiple physical channels.
+  # The key below is the name used by ExecuteConnectionCallAsync/executeConnectionCall.
+  # connections:
+  #   control:
+  #     type: "tcp"
+  #     default: true
+  #     host: "192.168.1.100"
+  #     port: 5000
+  #     maxConcurrency: 1
+  #   balance:
+  #     type: "serial"
+  #     serialPort: "COM4"
+  #     baudRate: 9600
+  #     maxConcurrency: 1
+  #   vendor:
+  #     type: "process"
+  #     executable: "./adapter/VendorAdapter.exe"
+  #     architecture: "x86"
+  #     framework: "net472"
+  #     apartmentState: "STA"
+  #     maxConcurrency: 1
+
+  # Vendor-specific options are bound to a typed options class by the driver.
+  settings:
+    simulated: true

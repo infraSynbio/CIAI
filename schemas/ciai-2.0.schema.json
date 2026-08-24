@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/infraSynbio/CIAI/schemas/ciai-2.0.schema.json",
+  "title": "CIAI 2.0 core messages",
+  "type": "object",
+  "$defs": {
+    "Result": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": ["string", "null"] },
+        "data": {}
+      },
+      "additionalProperties": true
+    },
+    "FunctionData": {
+      "type": "object",
+      "required": ["functionName"],
+      "properties": {
+        "functionName": { "type": "string", "minLength": 1 },
+        "instructionId": { "type": ["string", "null"] },
+        "labwareInfo": { "$ref": "#/$defs/Labware" },
+        "equipmentName": { "type": ["string", "null"] },
+        "nestId": { "type": ["string", "null"] },
+        "userId": { "type": ["string", "null"] },
+        "taskId": { "type": ["string", "null"] },
+        "functionParam": {}
+      },
+      "additionalProperties": true
+    },
+    "Labware": {
+      "type": ["object", "null"],
+      "properties": {
+        "LabwareName": { "type": ["string", "null"] },
+        "capacity": { "type": ["string", "null"] },
+        "capacityRow": { "type": "integer" },
+        "capacityColumn": { "type": "integer" }
+      },
+      "additionalProperties": true
+    },
+    "OperationData": {
+      "type": "object",
+      "required": ["operationName"],
+      "properties": {
+        "operationName": { "type": "string", "minLength": 1 },
+        "operationParam": {}
+      },
+      "additionalProperties": true
+    },
+    "SetData": {
+      "type": "object",
+      "required": ["setName", "setValue"],
+      "properties": {
+        "setName": { "type": "string", "minLength": 1 },
+        "setValue": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "EnterOrExitData": {
+      "type": "object",
+      "required": ["enterOrExitName"],
+      "properties": {
+        "enterOrExitName": { "type": "string", "minLength": 1 },
+        "enterOrExitValue": {}
+      },
+      "additionalProperties": true
+    },
+    "Finish": {
+      "type": "object",
+      "required": ["completion"],
+      "properties": {
+        "completion": { "type": "string", "enum": ["finish", "error"] },
+        "errorMsg": { "type": ["string", "null"] },
+        "instructionId": { "type": ["string", "null"] },
+        "nestId": { "type": ["string", "null"] },
+        "resultOutput": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "resultData": {}
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "HeartBeatInfo": {
+      "type": "object",
+      "required": ["heartBeatStatus", "heartBeatTime"],
+      "properties": {
+        "heartBeatStatus": { "type": "integer", "minimum": 0, "maximum": 6 },
+        "heartBeatTime": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

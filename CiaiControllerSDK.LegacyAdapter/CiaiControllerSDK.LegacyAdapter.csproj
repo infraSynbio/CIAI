@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Description>Length-prefixed sidecar server for legacy x86/.NET Framework/COM device SDKs.</Description>
+    <PackageId>CiaiControllerSDK.LegacyAdapter</PackageId>
+    <Version>2.0.0-beta.1</Version>
+    <Authors>infraSynbio contributors</Authors>
+    <Company>infraSynbio</Company>
+    <PackageTags>laboratory-automation;device-driver;legacy-adapter;CIAI</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/infraSynbio/CIAI</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="README.md" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

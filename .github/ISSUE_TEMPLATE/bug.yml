@@ -1,0 +1,55 @@
+name: SDK or protocol bug
+description: Report reproducible CIAI behavior that differs from the documented contract.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach vendor binaries, private documents, certificates, credentials, production logs, or sensitive sample data.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Wire protocol or schema
+        - .NET SDK
+        - Java SDK
+        - Legacy process adapter
+        - Documentation or example
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 2.0.0-beta.1 or commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Include endpoint, HTTP status, Result code, and a sanitized payload when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Link the protocol or SDK contract that defines the expectation.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Prefer a vendor-neutral test or simulated driver.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, certificates, real device addresses, proprietary binaries, restricted documents, and sensitive laboratory data.
+          required: true

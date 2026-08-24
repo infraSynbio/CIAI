@@ -1,0 +1,61 @@
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+*.nupkg
+*.snupkg
+
+# Java / Maven / Gradle
+**/target/
+**/.gradle/
+*.class
+*.jar
+*.war
+
+# IDE and OS
+**/.vs/
+**/.idea/
+**/.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+
+# Runtime output
+**/logs/
+*.log
+*.pid
+
+# Certificates, private keys and secrets
+**/certs/*
+!**/certs/README.md
+*.pfx
+*.p12
+*.jks
+*.keystore
+*.key
+*.pem
+*.cer
+*.crt
+.env
+.env.*
+secrets*.yml
+secrets*.yaml
+
+# Vendor binaries must be supplied by the deployer and must not be committed.
+vendor/
+vendors/
+vendor-sdk/
+*.dll
+*.exe
+*.so
+*.dylib
+
+# Test and coverage output
+TestResults/
+coverage/
+coverage.*
+artifacts/
+.artifacts/
+*.trx

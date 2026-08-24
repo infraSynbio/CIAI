@@ -1,0 +1,384 @@
+openapi: 3.1.0
+info:
+  title: CIAI Device Integration Protocol
+  version: 2.0.0-beta.1
+  description: Vendor-neutral API exposed by a CIAI-compatible laboratory device driver.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: http://localhost:12345
+    description: Local development
+paths:
+  /Info:
+    get:
+      operationId: getDriverInfo
+      summary: Get device registration and capabilities
+      responses:
+        "200":
+          description: Registration result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterInfoResult"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /HeartBeat:
+    get:
+      operationId: getHeartBeat
+      summary: Get driver and device health
+      responses:
+        "200":
+          description: Heartbeat result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HeartBeatResult"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /Function:
+    post:
+      operationId: acceptFunction
+      summary: Accept a long-running device function
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FunctionData"
+      responses:
+        "200":
+          description: Accepted or idempotently already accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptedResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /Operation:
+    post:
+      operationId: executeOperation
+      summary: Execute a synchronous device operation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperationData"
+      responses:
+        "200":
+          description: Operation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BooleanResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /Set:
+    post:
+      operationId: setValues
+      summary: Set one or more public device values
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              items:
+                $ref: "#/components/schemas/SetData"
+      responses:
+        "200":
+          description: Set result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BooleanResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /Get:
+    get:
+      operationId: getValues
+      summary: Get all public device values
+      responses:
+        "200":
+          description: Get result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetResult"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /EnterAndExit:
+    post:
+      operationId: enterAndExit
+      summary: Load, unload or transfer labware
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnterOrExitData"
+      responses:
+        "200":
+          description: Transfer result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinishResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+components:
+  responses:
+    BadRequest:
+      description: Invalid JSON or parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResult"
+    MethodNotAllowed:
+      description: Known endpoint with an invalid HTTP method
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResult"
+    PayloadTooLarge:
+      description: Request body exceeds the configured limit
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResult"
+    TooManyRequests:
+      description: Function queue or HTTP request resources are full
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResult"
+  schemas:
+    ResultBase:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: [string, "null"]
+    ErrorResult:
+      allOf:
+        - $ref: "#/components/schemas/ResultBase"
+        - type: object
+          properties:
+            data: {}
+    AcceptedResult:
+      allOf:
+        - $ref: "#/components/schemas/ResultBase"
+        - type: object
+          properties:
+            data:
+              type: [string, "null"]
+    BooleanResult:
+      allOf:
+        - $ref: "#/components/schemas/ResultBase"
+        - type: object
+          properties:
+            data:
+              type: [boolean, "null"]
+    RegisterInfoResult:
+      allOf:
+        - $ref: "#/components/schemas/ResultBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/RegisterInfo"
+    HeartBeatResult:
+      allOf:
+        - $ref: "#/components/schemas/ResultBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/HeartBeatInfo"
+    GetResult:
+      allOf:
+        - $ref: "#/components/schemas/ResultBase"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/GetReturn"
+    FinishResult:
+      allOf:
+        - $ref: "#/components/schemas/ResultBase"
+        - type: object
+          properties:
+            data:
+              oneOf:
+                - $ref: "#/components/schemas/Finish"
+                - type: "null"
+    FunctionData:
+      type: object
+      required: [functionName]
+      properties:
+        functionName:
+          type: string
+          minLength: 1
+        instructionId:
+          type: [string, "null"]
+        labwareInfo:
+          oneOf:
+            - $ref: "#/components/schemas/Labware"
+            - type: "null"
+        equipmentName:
+          type: [string, "null"]
+        nestId:
+          type: [string, "null"]
+        userId:
+          type: [string, "null"]
+        taskId:
+          type: [string, "null"]
+        functionParam: {}
+      additionalProperties: true
+    Labware:
+      type: object
+      properties:
+        LabwareName:
+          type: [string, "null"]
+        capacity:
+          type: [string, "null"]
+        capacityRow:
+          type: integer
+        capacityColumn:
+          type: integer
+      additionalProperties: true
+    OperationData:
+      type: object
+      required: [operationName]
+      properties:
+        operationName:
+          type: string
+          minLength: 1
+        operationParam: {}
+      additionalProperties: true
+    SetData:
+      type: object
+      required: [setName, setValue]
+      properties:
+        setName:
+          type: string
+          minLength: 1
+        setValue:
+          type: string
+      additionalProperties: true
+    EnterOrExitData:
+      type: object
+      required: [enterOrExitName]
+      properties:
+        enterOrExitName:
+          type: string
+          minLength: 1
+        enterOrExitValue: {}
+      additionalProperties: true
+    GetReturn:
+      type: object
+      required: [getName, getValue]
+      properties:
+        getName:
+          type: string
+        getValue:
+          type: [string, "null"]
+      additionalProperties: false
+    Finish:
+      type: object
+      required: [completion]
+      properties:
+        completion:
+          type: string
+          enum: [finish, error]
+        errorMsg:
+          type: [string, "null"]
+        instructionId:
+          type: [string, "null"]
+        nestId:
+          type: [string, "null"]
+        resultOutput:
+          type: [array, "null"]
+          items:
+            $ref: "#/components/schemas/ResultOutput"
+      additionalProperties: true
+    ResultOutput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        resultData: {}
+      additionalProperties: true
+    HeartBeatInfo:
+      type: object
+      required: [heartBeatStatus, heartBeatTime]
+      properties:
+        heartBeatStatus:
+          type: integer
+          minimum: 0
+          maximum: 6
+        heartBeatTime:
+          type: string
+          format: date-time
+      additionalProperties: true
+    RegisterInfo:
+      type: object
+      required: [basicInfo, advancedInfo]
+      properties:
+        basicInfo:
+          $ref: "#/components/schemas/BasicInfo"
+        advancedInfo:
+          $ref: "#/components/schemas/AdvancedInfo"
+      additionalProperties: true
+    BasicInfo:
+      type: object
+      required: [equipmentName, equipmentModel, equipmentManufacturer, version, functionalResources]
+      properties:
+        equipmentName: { type: string }
+        equipmentNameEN: { type: [string, "null"] }
+        equipmentModel: { type: [string, "null"] }
+        equipmentManufacturer: { type: [string, "null"] }
+        author: { type: [string, "null"] }
+        version: { type: [string, "null"] }
+        equipmentClass: { type: [string, "null"] }
+        canE_Stop: { type: integer }
+        functionalResources: { type: integer, minimum: 1 }
+        runtimeAccessibility: { type: integer }
+        parallelizability: { type: integer }
+        equipmentIcon: { type: [string, "null"] }
+        equipmentType: { type: integer }
+      additionalProperties: true
+    AdvancedInfo:
+      type: object
+      required: [equipmentFunctions, equipmentGetInfos, equipmentSetInfos, equipmentNests, equipmentOperations]
+      properties:
+        equipmentFunctions:
+          type: array
+          items: { type: object, additionalProperties: true }
+        equipmentGetInfos:
+          type: array
+          items: { type: object, additionalProperties: true }
+        equipmentSetInfos:
+          type: array
+          items: { type: object, additionalProperties: true }
+        equipmentNests:
+          type: array
+          items: { type: object, additionalProperties: true }
+        equipmentOperations:
+          type: array
+          items: { type: object, additionalProperties: true }
+        equipmentEnterAndExit:
+          type: [object, "null"]
+          additionalProperties: true
+      additionalProperties: true

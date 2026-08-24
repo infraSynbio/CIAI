@@ -1,0 +1,33 @@
+name: Protocol change proposal
+description: Propose a language-independent, testable change to the CIAI wire contract.
+title: "[Protocol]: "
+labels: [protocol]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Interoperability problem
+      description: Explain the observable device-integration case that cannot be represented today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed wire behavior
+      description: Specify endpoint, method, JSON, HTTP status, errors, compatibility, and concurrency semantics.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Explain why device.settings, a provider, dynamic Nest, or another existing extension is insufficient.
+    validations:
+      required: true
+  - type: textarea
+    id: conformance
+    attributes:
+      label: Conformance tests
+      description: Describe black-box tests and required .NET/Java contract updates.
+    validations:
+      required: true

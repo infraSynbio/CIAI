@@ -1,0 +1,46 @@
+name: Driver integration question
+description: Ask whether CIAI can represent a device or vendor SDK behavior.
+title: "[Driver]: "
+labels: [driver-integration]
+body:
+  - type: input
+    id: device
+    attributes:
+      label: Device class and model
+      description: Do not disclose confidential model information.
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Vendor interface
+      multiple: true
+      options:
+        - TCP
+        - Serial
+        - HTTP API
+        - Modern DLL or native API
+        - Legacy x86, .NET Framework, COM, or STA DLL
+        - File workflow
+        - Other or mixed transport
+    validations:
+      required: true
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: Required capabilities
+      description: Describe Functions, Operations, Gets, Sets, Nests, EnterAndExit, events, and concurrency without attaching restricted documents.
+    validations:
+      required: true
+  - type: textarea
+    id: differences
+    attributes:
+      label: Vendor-specific behavior
+      description: Include framing, state completion evidence, cancellation, callbacks, position roles, runtime, bitness, and resource limits.
+  - type: checkboxes
+    id: license
+    attributes:
+      label: Redistribution
+      options:
+        - label: I will not upload a vendor SDK, binary, or restricted manual unless its license explicitly permits public redistribution.
+          required: true

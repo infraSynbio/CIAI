@@ -1,0 +1,22 @@
+server:
+  host: "127.0.0.1"
+  port: 18080
+  useHttps: false
+  maxConcurrentRequests: 20
+  maxRequestBodyBytes: 1048576
+  functionQueueCapacity: 20
+  idempotencyCapacity: 1000
+  shutdownTimeoutMs: 10000
+
+callback:
+  enabled: false
+  url: ""
+  timeoutMs: 30000
+
+device:
+  deviceId: "example-temperature-csharp"
+  communicationType: "DLL"
+  deviceCallResources: 1
+  deviceCallTimeoutMs: 30000
+  settings:
+    simulated: true
