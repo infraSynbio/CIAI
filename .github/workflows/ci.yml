@@ -49,7 +49,7 @@ jobs:
       - run: dotnet build examples/csharp-temperature/Ciai.Example.Temperature.csproj -c Release
       - run: dotnet pack CiaiControllerSDK/CiaiControllerSDK.csproj -c Release --no-build --output artifacts
       - run: dotnet pack CiaiControllerSDK.LegacyAdapter/CiaiControllerSDK.LegacyAdapter.csproj -c Release --output artifacts
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dotnet-packages
           path: artifacts/*.*nupkg
@@ -69,7 +69,7 @@ jobs:
           java-version: ${{ matrix.java }}
           cache: maven
       - run: .\mvnw.cmd --batch-mode --no-transfer-progress verify
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: java-packages-jdk-${{ matrix.java }}
           path: |
