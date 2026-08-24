@@ -10,8 +10,23 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 5
+    groups:
+      maven-build-tools:
+        patterns:
+          - "org.apache.maven:*"
+          - "org.apache.maven.plugins:*"
+          - "org.codehaus.mojo:*"
+    ignore:
+      # JUnit 6 requires a newer Java runtime; this SDK intentionally retains Java 8 compatibility.
+      - dependency-name: "org.junit.jupiter:junit-jupiter"
+        update-types:
+          - "version-update:semver-major"
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: monthly
     open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
