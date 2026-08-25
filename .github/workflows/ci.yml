@@ -31,11 +31,12 @@ jobs:
             echo "Certificate, private key, vendor binary, or executable is tracked."
             exit 1
           fi
-      - name: Validate JSON Schema
-        run: python -m json.tool schemas/ciai-2.0.schema.json > /dev/null
-      - name: Validate OpenAPI shape
-        run: |
-          ruby -e 'require "yaml"; d=YAML.safe_load(File.read("openapi/ciai-2.0.yaml"), aliases: true); expected=%w[/EnterAndExit /Function /Get /HeartBeat /Info /Operation /Set]; abort "OpenAPI version must be 3.1.0" unless d["openapi"] == "3.1.0"; abort "Unexpected CIAI endpoint set" unless d.fetch("paths").keys.sort == expected.sort'
+      - name: Install contract validators
+        run: python -m pip install --disable-pip-version-check -r scripts/requirements-validation.txt
+      - name: Validate schemas, OpenAPI and published YAML
+        run: python scripts/validate_contracts.py
+      - name: Validate driver migration skill
+        run: python .agents/skills/device-driver-migration/scripts/validate_skill.py
 
   dotnet-contract:
     runs-on: windows-latest
@@ -46,7 +47,7 @@ jobs:
         with:
           dotnet-version: "8.0.x"
       - run: dotnet restore CiaiControllerSDK.ContractTests/CiaiControllerSDK.ContractTests.csproj
-      - run: dotnet build CiaiControllerSDK/CiaiControllerSDK.csproj -c Release --no-restore
+      - run: dotnet build CiaiControllerSDK/CiaiControllerSDK.csproj -c Release --no-restore -warnaserror
       - run: dotnet run --project CiaiControllerSDK.ContractTests/CiaiControllerSDK.ContractTests.csproj -c Release --no-restore
       - run: dotnet build examples/csharp-temperature/Ciai.Example.Temperature.csproj -c Release
       - run: dotnet pack CiaiControllerSDK/CiaiControllerSDK.csproj -c Release --no-build --output artifacts
@@ -70,7 +71,38 @@ jobs:
           distribution: temurin
           java-version: ${{ matrix.java }}
           cache: maven
-      - run: .\mvnw.cmd --batch-mode --no-transfer-progress verify
+      - run: .\mvnw.cmd --batch-mode --no-transfer-progress install
+      - name: Validate configuration from an arbitrary working directory
+        shell: pwsh
+        run: |
+          $repository = $env:GITHUB_WORKSPACE
+          Push-Location $env:RUNNER_TEMP
+          try {
+            & "$repository\mvnw.cmd" --batch-mode --no-transfer-progress `
+              -f "$repository\examples\java-temperature\pom.xml" exec:java `
+              "-Dexec.args=--validate --config $repository\examples\java-temperature\src\main\resources\application.yml"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          finally {
+            Pop-Location
+          }
+      - name: Verify Java package contents
+        shell: pwsh
+        run: |
+          $jar = Get-ChildItem CiaiControllerSDKForJava/target/ciai-controller-sdk-*.jar |
+            Where-Object Name -NotMatch '-(sources|javadoc)\.jar$' |
+            Select-Object -First 1
+          $contents = & jar tf $jar.FullName
+          $required = @(
+            'com/ciai/controller/sdk/webserver/DriverCli.class',
+            'com/ciai/controller/sdk/config/ConfigurationValidationReport.class',
+            'com/ciai/controller/sdk/service/OwnedSemaphore.class',
+            'META-INF/ciai/openapi/ciai-2.0.yaml',
+            'META-INF/ciai/schemas/application.schema.json'
+          )
+          foreach ($entry in $required) {
+            if ($contents -notcontains $entry) { throw "Missing JAR entry: $entry" }
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: java-packages-jdk-${{ matrix.java }}

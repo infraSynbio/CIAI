@@ -98,6 +98,11 @@ TLS 默认基线为 `TLSv1.2`，因此 Java 8、Java 11 和 .NET 部署可以使
 
 - 密码、Token、客户端密钥和真实证书不得提交。
 - 示例中的相对路径相对于配置文件所在目录解析。
+- .NET 使用 `DriverHost.ValidateConfiguration(...)`，Java 使用
+  `DriverHost.validateConfiguration(...)` 或 `DriverCli --validate` 做无硬件预检；
+  预检不得创建驱动、连接设备或占用监听端口。
+- 厂商自定义文件路径使用 .NET `Configuration.ResolvePath(...)` 或 Java
+  `getConfiguration().resolvePath(...)`，不要二次读取 YAML，也不要依赖当前工作目录。
 - process 适配器、文件工作流和下载目录必须限制在部署者明确允许的根目录。
 - 不得把厂商二进制复制到本仓库；由使用者根据厂商许可在部署阶段提供。
 
@@ -105,3 +110,4 @@ TLS 默认基线为 `TLSv1.2`，因此 Java 8、Java 11 和 .NET 部署可以使
 
 - [.NET application.sample.yml](../CiaiControllerSDK/application.sample.yml)
 - [Java application.sample.yml](../CiaiControllerSDKForJava/src/main/resources/application.sample.yml)
+- [application.yml JSON Schema](../schemas/application.schema.json)

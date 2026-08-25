@@ -37,9 +37,44 @@ namespace CiaiControllerSDK.Config
                 throw new FileNotFoundException($"配置文件不存在: {configPath}");
             }
 
-            var yaml = File.ReadAllText(configPath);
-            return Parse(yaml);
+            var fullPath = Path.GetFullPath(configPath);
+            var yaml = File.ReadAllText(fullPath);
+            var config = Parse(yaml);
+            config.SourceDirectory = Path.GetDirectoryName(fullPath);
+            ResolveKnownRelativePaths(config, Path.GetDirectoryName(fullPath));
+            return config;
         }
+
+        private static void ResolveKnownRelativePaths(DriverConfig config, string configDirectory)
+        {
+            if (config == null || string.IsNullOrWhiteSpace(configDirectory)) return;
+            if (!string.IsNullOrWhiteSpace(config.Server?.Certificate?.Path))
+                config.Server.Certificate.Path = ResolvePath(configDirectory, config.Server.Certificate.Path);
+            if (!string.IsNullOrWhiteSpace(config.Server?.TrustStore?.Path))
+                config.Server.TrustStore.Path = ResolvePath(configDirectory, config.Server.TrustStore.Path);
+
+            if (config.Device?.Connections == null) return;
+            foreach (var source in config.Device.Connections.Values.Where(value => value != null))
+            {
+                if (!string.IsNullOrWhiteSpace(source.WorkingDirectory))
+                    source.WorkingDirectory = ResolvePath(configDirectory, source.WorkingDirectory);
+                if (string.IsNullOrWhiteSpace(source.Executable) || Path.IsPathRooted(source.Executable))
+                    continue;
+
+                var hasSeparator = source.Executable.IndexOf(Path.DirectorySeparatorChar) >= 0 ||
+                                   source.Executable.IndexOf(Path.AltDirectorySeparatorChar) >= 0;
+                var candidate = hasSeparator
+                    ? Path.Combine(configDirectory, source.Executable)
+                    : !string.IsNullOrWhiteSpace(source.WorkingDirectory)
+                        ? Path.Combine(source.WorkingDirectory, source.Executable)
+                        : null;
+                if (candidate != null && (hasSeparator || File.Exists(candidate)))
+                    source.Executable = Path.GetFullPath(candidate);
+            }
+        }
+
+        private static string ResolvePath(string baseDirectory, string value) =>
+            Path.IsPathRooted(value) ? Path.GetFullPath(value) : Path.GetFullPath(Path.Combine(baseDirectory, value));
 
         /// <summary>
         /// 从字符串解析配置
@@ -139,10 +174,11 @@ namespace CiaiControllerSDK.Config
         /// <returns>服务器选项</returns>
         public static WebServer.HttpsOptions ToHttpsOptions(this DriverConfig config)
         {
-            if (config?.Server == null)
-            {
-                throw new ArgumentException("服务器配置不能为空");
-            }
+            if (config == null)
+                throw new ArgumentNullException(nameof(config));
+
+            // server段可省略：使用可直接启动的HTTP默认值。
+            config.Server ??= new ServerConfig();
 
             var options = new WebServer.HttpsOptions
             {
@@ -177,13 +213,9 @@ namespace CiaiControllerSDK.Config
             // SSL/TLS 配置（对应 Spring Boot: server.ssl.protocol, ciphers, enabled-protocols）
             if (config.Server.Ssl != null)
             {
-                options.Protocol = config.Server.Ssl.Protocol ?? "TLSv1.3";
-                options.EnabledProtocols = config.Server.Ssl.EnabledProtocols ?? new[] { "TLSv1.3" };
-                options.Ciphers = config.Server.Ssl.Ciphers ?? new[]
-                {
-                    "TLS_AES_256_GCM_SHA384",
-                    "TLS_CHACHA20_POLY1305_SHA256"
-                };
+                options.Protocol = config.Server.Ssl.Protocol ?? "TLSv1.2";
+                options.EnabledProtocols = config.Server.Ssl.EnabledProtocols ?? new[] { "TLSv1.2" };
+                options.Ciphers = config.Server.Ssl.Ciphers ?? Array.Empty<string>();
             }
 
             // 客户端认证配置（对应 Spring Boot: server.ssl.client-auth）
@@ -197,7 +229,8 @@ namespace CiaiControllerSDK.Config
                     "need" => WebServer.ClientAuthMode.Need,
                     "want" => WebServer.ClientAuthMode.Want,
                     "none" => WebServer.ClientAuthMode.None,
-                    _ => WebServer.ClientAuthMode.Need
+                    _ => throw new ArgumentException(
+                        $"不支持的客户端认证模式: {config.Server.ClientAuth.Mode}")
                 };
                 options.RequireClientCertificate = options.ClientAuth != WebServer.ClientAuthMode.None;
                 options.TrustedClientThumbprints = config.Server.ClientAuth.TrustedThumbprints;
@@ -207,7 +240,7 @@ namespace CiaiControllerSDK.Config
             // 回调配置
             options.CallbackUrl = config.Callback?.Url;
             options.CallbackTimeoutMs = config.Callback?.TimeoutMs ?? 30000;
-            options.EnableCallback = config.Callback?.Enabled ?? true;
+            options.EnableCallback = config.Callback?.Enabled ?? false;
 
             return options;
         }
@@ -221,7 +254,9 @@ namespace CiaiControllerSDK.Config
         {
             var deviceConfig = new Core.DeviceConfiguration
             {
-                DeviceId = config.Device?.DeviceId ?? Guid.NewGuid().ToString(),
+                // Do not invent a different identity on every restart. Missing IDs stay visible
+                // to configuration diagnostics and can still be tolerated by development drivers.
+                DeviceId = config.Device?.DeviceId,
                 DeviceCallResources = config.Device?.DeviceCallResources ?? 1,
                 DeviceCallTimeout = config.Device?.DeviceCallTimeoutMs ?? 30000
             };
@@ -335,6 +370,8 @@ namespace CiaiControllerSDK.Config
                     deviceConfig.ExtraSettings[setting.Key] = setting.Value;
                 }
             }
+
+            deviceConfig.ConfigurationDirectory = config.SourceDirectory;
 
             return deviceConfig;
         }

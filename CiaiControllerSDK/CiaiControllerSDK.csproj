@@ -20,6 +20,9 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <IsPackable>true</IsPackable>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
@@ -44,6 +47,15 @@
     <EmbeddedResource Include="icon\**\*" />
     <None Remove="README.md" />
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\openapi\ciai-2.0.yaml"
+          Link="openapi\ciai-2.0.yaml"
+          Pack="true" PackagePath="contentFiles\any\any\openapi\" />
+    <None Include="..\schemas\ciai-2.0.schema.json"
+          Link="schemas\ciai-2.0.schema.json"
+          Pack="true" PackagePath="contentFiles\any\any\schemas\" />
+    <None Include="..\schemas\application.schema.json"
+          Link="schemas\application.schema.json"
+          Pack="true" PackagePath="contentFiles\any\any\schemas\" />
   </ItemGroup>
 
 </Project>

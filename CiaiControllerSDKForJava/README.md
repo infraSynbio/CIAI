@@ -9,7 +9,7 @@
 1. 复制 `src/main/resources/application.sample.yml` 为 `application.yml`。
 2. 填写设备信息和通信参数。
 3. 继承 `DeviceDriverBase`，添加注解方法。
-4. 用 `DriverHost.run(MyDriver.class, "application.yml")` 启动。
+4. 用 `DriverCli.run(MyDriver.class, args)` 启动。
 
 ```java
 @DeviceDriver(name = "温控器", functionalResources = 2, parallelizability = 1)
@@ -56,9 +56,17 @@ public final class TemperatureDriver extends DeviceDriverBase {
 
 ```java
 public static void main(String[] args) {
-    DriverHost.run(TemperatureDriver.class, "application.yml");
+    DriverCli.run(TemperatureDriver.class, args);
 }
 ```
+
+直接运行使用 `application.yml`；也支持位置参数、`--config path/to/application.yml`
+以及不创建驱动、不连接硬件、不占用端口的
+`--validate --config path/to/application.yml`。
+
+默认配置按“当前工作目录 → 驱动 JAR 所在目录 → classpath”解析。公共 adapter、
+工作目录、证书和信任库相对路径以配置文件目录为基准；厂商文件路径使用
+`getConfiguration().resolvePath(...)`，不要依赖 `user.dir`。
 
 普通 TCP、Serial、HTTP 驱动不需要构造函数、通信工厂、连接代码或信号量。只有厂商 DLL/API 登录、事件订阅、特殊握手等生命周期逻辑才重写初始化与断开。
 
@@ -76,8 +84,8 @@ server:
   shutdownTimeoutMs: 30000
 
 callback:
-  enabled: true
-  url: "http://platform.example/overSeer/finish"
+  enabled: false
+  url: ""
   timeoutMs: 30000
 
 device:
@@ -161,7 +169,7 @@ public final class VendorProvider implements ICommunicationProvider {
 }
 
 CommunicationProviderRegistry.register(new VendorProvider());
-DriverHost.run(MyDriver.class, "application.yml");
+DriverCli.run(MyDriver.class, args);
 ```
 
 SDK只校验公共连接字段，未知厂商字段保持开放。建议把复杂配置放在 `device.settings` 的一个对象里：
@@ -170,6 +178,8 @@ SDK只校验公共连接字段，未知厂商字段保持开放。建议把复�
 ProtocolOptions options = getConfiguration()
         .getRequiredExtraSetting("protocol", ProtocolOptions.class);
 int station = getConfiguration().getExtraSetting("protocol.station", Integer.class, 1);
+String mapFile = getConfiguration().resolvePath(
+        getConfiguration().getRequiredExtraSetting("protocol.mapFile", String.class));
 ```
 
 必需配置错误会包含 `device.settings.protocol` 路径。`ConfigurationValidator.validate(...)` 可用于配置体检，正式初始化会阻止公共配置错误启动。

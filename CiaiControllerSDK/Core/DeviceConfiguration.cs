@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 
@@ -10,6 +11,9 @@ namespace CiaiControllerSDK.Core
     /// </summary>
     public class DeviceConfiguration
     {
+        /// <summary>配置文件所在目录。供厂商自定义settings中的相对路径解析使用。</summary>
+        public string ConfigurationDirectory { get; internal set; }
+
         /// <summary>
         /// 设备ID
         /// </summary>
@@ -198,6 +202,16 @@ namespace CiaiControllerSDK.Core
 
             ExtraSettings ??= new Dictionary<string, object>();
             ExtraSettings[key] = value;
+        }
+
+        /// <summary>以application.yml所在目录解析厂商配置中的相对路径。</summary>
+        public string ResolvePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return path;
+            if (Path.IsPathRooted(path)) return Path.GetFullPath(path);
+            return string.IsNullOrWhiteSpace(ConfigurationDirectory)
+                ? Path.GetFullPath(path)
+                : Path.GetFullPath(Path.Combine(ConfigurationDirectory, path));
         }
 
         /// <summary>

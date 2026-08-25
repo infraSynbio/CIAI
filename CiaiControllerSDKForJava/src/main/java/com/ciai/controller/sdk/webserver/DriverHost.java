@@ -1,22 +1,31 @@
 package com.ciai.controller.sdk.webserver;
 
 import com.ciai.controller.sdk.config.DriverConfig;
+import com.ciai.controller.sdk.config.ConfigurationDiagnostic;
+import com.ciai.controller.sdk.config.ConfigurationValidationReport;
+import com.ciai.controller.sdk.config.ConfigurationValidator;
 import com.ciai.controller.sdk.config.YamlConfigLoader;
 import com.ciai.controller.sdk.core.DeviceConfiguration;
 import com.ciai.controller.sdk.core.DeviceDriverBase;
 import com.ciai.controller.sdk.logging.LoggerProvider;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Collections;
 
 /**
  * 驱动宿主（启动器）
  */
 public final class DriverHost {
 
-    private static final Logger logger = LoggerFactory.getLogger(DriverHost.class);
+    private static Logger logger() {
+        return LoggerProvider.createLogger(DriverHost.class);
+    }
 
     private DriverHost() {
         // 私有构造函数，防止实例化
@@ -34,15 +43,22 @@ public final class DriverHost {
      */
     public static <T extends DeviceDriverBase> void run(Class<T> driverClass, String configPath,
                                                         org.slf4j.ILoggerFactory loggerFactory) {
+        if (loggerFactory != null) {
+            LoggerProvider.setLoggerFactory(loggerFactory);
+        }
+        String resolvedConfigPath = resolveConfigPath(driverClass, configPath);
         try {
-            DriverConfig config = YamlConfigLoader.loadOrThrow(configPath);
+            DriverConfig config = YamlConfigLoader.loadOrThrow(resolvedConfigPath);
+            if (config.getDevice() == null) {
+                throw new IllegalArgumentException("ERROR: device: The device section is required");
+            }
 
             HttpsOptions options = YamlConfigLoader.toHttpsOptions(config);
             DeviceConfiguration deviceConfig = YamlConfigLoader.toDeviceConfiguration(config);
 
             run(driverClass, options, deviceConfig);
         } catch (Exception e) {
-            logger.error("Failed to start driver from config: {}", configPath, e);
+            logger().error("Failed to start driver from config: {}", resolvedConfigPath, e);
             throw new RuntimeException("Failed to start driver", e);
         }
     }
@@ -54,39 +70,120 @@ public final class DriverHost {
         run(driverClass, "application.yml");
     }
 
+    /** Loads and validates configuration without creating a driver, connecting hardware or opening a port. */
+    public static ConfigurationValidationReport validateConfiguration(String configPath) {
+        return validateConfiguration(DriverHost.class, configPath);
+    }
+
+    /** Preflights a configuration using the application/driver class as the JAR location anchor. */
+    public static ConfigurationValidationReport validateConfiguration(Class<?> anchorClass, String configPath) {
+        String resolvedConfigPath = resolveConfigPath(anchorClass, configPath);
+        try {
+            DriverConfig config = YamlConfigLoader.loadOrThrow(resolvedConfigPath);
+            if (config.getDevice() == null) {
+                return new ConfigurationValidationReport(resolvedConfigPath, Collections.singletonList(
+                        new ConfigurationDiagnostic(ConfigurationDiagnostic.Severity.ERROR,
+                                "device", "The device section is required")));
+            }
+            return new ConfigurationValidationReport(resolvedConfigPath,
+                    ConfigurationValidator.validate(YamlConfigLoader.toHttpsOptions(config),
+                            YamlConfigLoader.toDeviceConfiguration(config)));
+        } catch (Exception e) {
+            return new ConfigurationValidationReport(resolvedConfigPath, Collections.singletonList(
+                    new ConfigurationDiagnostic(ConfigurationDiagnostic.Severity.ERROR,
+                            "configuration", e.getMessage())));
+        }
+    }
+
+    public static ConfigurationValidationReport validateConfiguration() {
+        return validateConfiguration("application.yml");
+    }
+
+    /** 兼容入口：优先当前工作目录，其次SDK所在目录。应用启动应优先使用带anchorClass的重载。 */
+    public static String resolveConfigPath(String configPath) {
+        return resolveConfigPath(DriverHost.class, configPath);
+    }
+
+    /** 优先使用当前工作目录，其次使用驱动应用/JAR所在目录；classpath回退由配置加载器处理。 */
+    public static String resolveConfigPath(Class<?> anchorClass, String configPath) {
+        if (configPath == null || configPath.trim().isEmpty()) {
+            throw new IllegalArgumentException("Config path is required");
+        }
+        Path requested = Paths.get(configPath);
+        if (requested.isAbsolute() || Files.exists(requested)) {
+            return requested.toAbsolutePath().normalize().toString();
+        }
+        try {
+            Class<?> anchor = anchorClass == null ? DriverHost.class : anchorClass;
+            URI codeLocation = anchor.getProtectionDomain().getCodeSource().getLocation().toURI();
+            Path base = Paths.get(codeLocation);
+            if (Files.isRegularFile(base)) {
+                base = base.getParent();
+            }
+            Path besideRuntime = base.resolve(configPath).normalize();
+            if (Files.exists(besideRuntime)) {
+                return besideRuntime.toString();
+            }
+        } catch (Exception ignored) {
+            // 保留原路径，让YamlConfigLoader继续尝试classpath并给出最终诊断。
+        }
+        return configPath;
+    }
+
     /**
      * 从HttpsOptions启动
      */
     public static <T extends DeviceDriverBase> void run(Class<T> driverClass, HttpsOptions options,
                                                         DeviceConfiguration deviceConfig) {
+        ConfigurationValidator.validateAndThrow(options, deviceConfig);
+        T driver = createDriver(driverClass, deviceConfig);
+        DriverHttpServer server = null;
+        Thread shutdownHook = null;
         try {
-            T driver = createDriver(driverClass, deviceConfig);
-
             // 初始化驱动
             if (!driver.initialize()) {
                 throw new IllegalStateException("Failed to initialize driver");
             }
 
             // 创建并启动服务器
-            DriverHttpServer server = new DriverHttpServer(options, driver);
+            server = new DriverHttpServer(options, driver);
 
             // 添加关闭钩子
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                logger.info("Shutting down...");
-                server.stop();
-                driver.close();
-            }));
+            DriverHttpServer ownedServer = server;
+            shutdownHook = new Thread(() -> {
+                logger().info("Shutting down...");
+                ownedServer.close();
+            }, "ciai-driver-shutdown");
+            Runtime.getRuntime().addShutdownHook(shutdownHook);
 
             // 启动服务器
             server.start();
 
             // 保持运行
-            logger.info("Driver host started. Press Ctrl+C to stop.");
+            logger().info("Driver host started. Press Ctrl+C to stop.");
             Thread.currentThread().join();
-
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger().info("Driver host interrupted; stopping");
         } catch (Exception e) {
-            logger.error("Failed to start driver host", e);
+            logger().error("Failed to start driver host", e);
             throw new RuntimeException("Failed to start driver host", e);
+        } finally {
+            boolean closeHere = true;
+            if (shutdownHook != null) {
+                try {
+                    closeHere = Runtime.getRuntime().removeShutdownHook(shutdownHook);
+                } catch (IllegalStateException shutdownInProgress) {
+                    closeHere = false;
+                }
+            }
+            if (closeHere) {
+                if (server != null) {
+                    server.close();
+                } else {
+                    driver.close();
+                }
+            }
         }
     }
 
@@ -95,9 +192,9 @@ public final class DriverHost {
      */
     public static <T extends DeviceDriverBase> DriverHttpServer runAsync(Class<T> driverClass, HttpsOptions options,
                                                                     DeviceConfiguration deviceConfig) {
+        ConfigurationValidator.validateAndThrow(options, deviceConfig);
+        T driver = createDriver(driverClass, deviceConfig);
         try {
-            T driver = createDriver(driverClass, deviceConfig);
-
             if (!driver.initialize()) {
                 throw new IllegalStateException("Failed to initialize driver");
             }
@@ -107,7 +204,8 @@ public final class DriverHost {
 
             return server;
         } catch (Exception e) {
-            logger.error("Failed to start driver host async", e);
+            driver.close();
+            logger().error("Failed to start driver host async", e);
             throw new RuntimeException("Failed to start driver host async", e);
         }
     }
@@ -128,7 +226,7 @@ public final class DriverHost {
             }
             return driverClass.getConstructor().newInstance();
         } catch (Exception e) {
-            logger.error("Failed to create driver instance: {}", driverClass.getName(), e);
+            logger().error("Failed to create driver instance: {}", driverClass.getName(), e);
             throw new RuntimeException("Failed to create driver instance", e);
         }
     }
@@ -145,9 +243,9 @@ public final class DriverHost {
      * 参照 IncubatorController 的 Spring Boot SSL 配置
      */
     public static class HttpsOptionsBuilder {
-        private int port = 443;
+        private int port = 8080;
         private String host = "localhost";
-        private boolean useHttps = true;
+        private boolean useHttps = false;
         private String serverCertificatePath;
         private String serverCertificatePassword;
         private String keyStoreType = "PKCS12";
@@ -155,15 +253,15 @@ public final class DriverHost {
         private String trustStorePath;
         private String trustStorePassword;
         private String trustStoreType = "PKCS12";
-        private String protocol = "TLSv1.3";
-        private String[] enabledProtocols = new String[]{"TLSv1.3"};
-        private String[] ciphers = new String[]{"TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"};
-        private HttpsOptions.ClientAuthMode clientAuth = HttpsOptions.ClientAuthMode.NEED;
-        private boolean requireClientCertificate = true;
+        private String protocol = "TLSv1.2";
+        private String[] enabledProtocols = new String[]{"TLSv1.2"};
+        private String[] ciphers = new String[0];
+        private HttpsOptions.ClientAuthMode clientAuth = HttpsOptions.ClientAuthMode.NONE;
+        private boolean requireClientCertificate = false;
         private final List<String> trustedClientThumbprints = new ArrayList<>();
         private String callbackUrl;
         private int callbackTimeoutMs = 30000;
-        private boolean enableCallback = true;
+        private boolean enableCallback = false;
 
         public HttpsOptionsBuilder withPort(int port) {
             this.port = port;

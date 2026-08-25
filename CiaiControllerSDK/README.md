@@ -78,6 +78,17 @@ device:
 
 配置支持 `${NAME}` 环境变量和 `${NAME:-default}` 默认值，证书密码和 Token 不需要写进仓库。启动时会校验通信字段、资源数、注解方法签名、同类名称唯一性和 `FormJson` 格式。
 
+相对配置路径优先从当前工作目录查找，再从 EXE 所在目录查找；公共证书、
+adapter 和工作目录随后都以实际 `application.yml` 所在目录为基准。厂商文件路径使用
+`Configuration.ResolvePath(...)`，不要依赖进程碰巧从哪个目录启动。
+
+安装、CI 或首次运行可以先做无硬件预检，不创建驱动、不连接设备、不占用端口：
+
+```csharp
+var report = DriverHost.ValidateConfiguration(configPath);
+report.ThrowIfInvalid();
+```
+
 串口标准配置包括 `port`、`baudRate`、`dataBits`、`stopBits`、`parity`、`encoding` 及独立读写超时。TCP 也支持独立连接、读取、写入超时。`SerialCommunication`/`TcpCommunication` 会将每个请求-响应作为一个固定单通道事务，多个接口同时调用时不会交叉收发；驱动无需再加串口/TCP信号量。带结束符或定长协议直接使用基类的 `SendAndReadUntilAsync` / `SendAndReadExactAsync`，两种通信共享同一个帧接口。
 
 HTTP 通信的 Connect 表示客户端配置已就绪，不会在初始化时擅自 GET 设备根路径。实际 GET/POST 失败仍反映在每次调用结果中。
@@ -180,6 +191,8 @@ device:
 ```csharp
 public sealed class ProtocolOptions { public int Station { get; set; } public string Checksum { get; set; } }
 var options = Configuration.GetRequiredExtraSetting<ProtocolOptions>("protocol");
+var mapFile = Configuration.ResolvePath(
+    Configuration.GetRequiredExtraSetting<string>("protocol.mapFile"));
 ```
 
 `GetRequiredExtraSetting` 缺失或类型不匹配会指出 `device.settings.protocol`；可选值使用 `GetExtraSetting` 并给默认值。支持点路径，例如 `GetExtraSetting("protocol.station", 1)`。`ConfigurationValidator.Validate(...)` 可在工具或测试中列出所有公共配置错误和警告，正式初始化会阻止错误配置启动。

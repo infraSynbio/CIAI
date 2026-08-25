@@ -4,8 +4,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ciai.controller.sdk.model.Finish;
+import com.ciai.controller.sdk.logging.LoggerProvider;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
  */
 public class HttpCallback implements AutoCloseable {
 
-    private static final Logger logger = LoggerFactory.getLogger(HttpCallback.class);
+    private static final Logger logger = LoggerProvider.createLogger(HttpCallback.class);
     private static final ObjectMapper objectMapper = new ObjectMapper()
             .setDefaultPropertyInclusion(JsonInclude.Include.ALWAYS)
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);

@@ -104,6 +104,10 @@
 
 ## 验证证据
 
+- [ ] C# `DriverHost.ValidateConfiguration` 与 Java `DriverHost.validateConfiguration` 均可在无硬件、无端口监听时检查同一公共错误。
+- [ ] 从非应用工作目录启动时，两端都能在驱动EXE/JAR旁找到配置，并以配置目录解析公共adapter、证书和厂商文件路径。
+- [ ] `openapi/ciai-2.0.yaml` 只包含源码实现的7个端点，`schemas/application.schema.json` 与所有发布YAML样例一致。
+
 - [ ] SDK 所有目标框架构建为 0 错误；记录警告并判断是否可接受。
 - [ ] 目标驱动和受影响旧驱动构建成功。
 - [ ] 契约测试通过，覆盖 7 类注册、返回值、路由、配置、回调和心跳。

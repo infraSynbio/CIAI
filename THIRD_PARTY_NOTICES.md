@@ -13,6 +13,6 @@ CIAI uses the following direct runtime libraries. They remain the property of th
 | SnakeYAML | Java SDK | Apache-2.0 |
 | jSerialComm | Java SDK | Apache-2.0 or LGPL-3.0; CIAI uses the Apache-2.0 option |
 
-JUnit Jupiter is used for tests under EPL-2.0. Maven and its build plugins are build tools and are not bundled into the SDK artifacts. The Maven Wrapper scripts are provided by the Apache Maven Wrapper project under Apache-2.0.
+JUnit Jupiter is used for tests under EPL-2.0. PyYAML and `jsonschema` are used only by repository validation scripts under MIT licenses. Maven and its build plugins are build tools and are not bundled into the SDK artifacts. The Maven Wrapper scripts are provided by the Apache Maven Wrapper project under Apache-2.0.
 
 Project links and exact resolved versions are available in `CiaiControllerSDK/CiaiControllerSDK.csproj`, `CiaiControllerSDKForJava/pom.xml`, and the package lock/asset metadata produced during a build.

@@ -3,6 +3,8 @@ package com.ciai.controller.sdk.webserver;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 /**
  * HTTPS服务器配置选项
@@ -11,9 +13,9 @@ import java.util.List;
 public class HttpsOptions {
 
     // 基本服务器配置
-    private int port = 443;
+    private int port = 8080;
     private String host = "localhost";
-    private boolean useHttps = true;
+    private boolean useHttps = false;
 
     // 服务端证书配置 (对应 Spring Boot: server.ssl.key-store-*)
     private String serverCertificatePath;
@@ -27,22 +29,22 @@ public class HttpsOptions {
     private String trustStoreType = "PKCS12";  // 信任库类型
 
     // TLS 协议配置 (对应 Spring Boot: server.ssl.protocol, server.ssl.enabled-protocols)
-    private String protocol = "TLSv1.2";  // Java 8与现代运行时共同支持的安全基线
+    private String protocol = "TLSv1.2";  // Java 8/11+均可用的安全基线
     private String[] enabledProtocols = new String[]{"TLSv1.2"};  // 启用的协议
 
     // 加密套件配置 (对应 Spring Boot: server.ssl.ciphers)
-    private String[] ciphers = new String[0]; // 空数组表示使用JVM安全策略
+    private String[] ciphers = new String[0]; // 默认采用JVM安全策略
 
     // 客户端认证配置 (对应 Spring Boot: server.ssl.client-auth)
-    private ClientAuthMode clientAuth = ClientAuthMode.NEED;  // need, want, none
-    private boolean requireClientCertificate = true;
+    private ClientAuthMode clientAuth = ClientAuthMode.NONE;  // need, want, none
+    private boolean requireClientCertificate = false;
     private String[] trustedClientThumbprints = new String[0];
     private String[] trustedIssuerThumbprints = new String[0];
 
     // 回调配置
     private String callbackUrl;
     private int callbackTimeoutMs = 30000;
-    private boolean enableCallback = true;
+    private boolean enableCallback = false;
     private int maxConcurrentRequests = 100;
     private int maxRequestBodyBytes = 1024 * 1024;
     private int functionQueueCapacity = 100;
@@ -255,15 +257,33 @@ public class HttpsOptions {
         if (port <= 0 || port > 65535) {
             errors.add("Invalid port: " + port);
         }
+        if (host == null || host.trim().isEmpty()) {
+            errors.add("Server host is required");
+        }
         if (maxConcurrentRequests <= 0 || maxRequestBodyBytes <= 0
                 || functionQueueCapacity <= 0 || idempotencyCapacity <= 0
                 || shutdownTimeoutMs <= 0) {
             errors.add("Server concurrency, body, queue, idempotency and shutdown limits must be positive");
         }
+        if (callbackTimeoutMs <= 0) {
+            errors.add("Callback timeout must be positive");
+        }
+        if (enableCallback) {
+            try {
+                java.net.URI callback = java.net.URI.create(callbackUrl);
+                String scheme = callback.getScheme();
+                if (scheme == null || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https")))
+                    throw new IllegalArgumentException();
+            } catch (RuntimeException e) {
+                errors.add("An absolute HTTP/HTTPS callback URL is required when callback is enabled");
+            }
+        }
 
         if (useHttps) {
             if (serverCertificatePath == null || serverCertificatePath.isEmpty()) {
                 errors.add("Server certificate path (key-store) is required for HTTPS");
+            } else if (!Files.isRegularFile(Paths.get(serverCertificatePath))) {
+                errors.add("Server certificate file not found: " + serverCertificatePath);
             }
 
             // 如果需要客户端证书验证，检查信任库配置
@@ -271,7 +291,9 @@ public class HttpsOptions {
                 // 信任库路径可以为空，此时使用密钥库作为信任库（与 IncubatorController 一致）
                 // 但如果配置了信任库路径，则必须有密码
                 if (trustStorePath != null && !trustStorePath.isEmpty()) {
-                    // 信任库已配置，OK
+                    if (!Files.isRegularFile(Paths.get(trustStorePath))) {
+                        errors.add("Trust store file not found: " + trustStorePath);
+                    }
                 }
                 // 如果没有配置信任库，则使用密钥库作为信任库（与 IncubatorController 的做法一致）
             }
@@ -298,6 +320,7 @@ public class HttpsOptions {
         options.setHost(host);
         options.setUseHttps(false);
         options.setRequireClientCertificate(false);
+        options.setClientAuth(ClientAuthMode.NONE);
         return options;
     }
 

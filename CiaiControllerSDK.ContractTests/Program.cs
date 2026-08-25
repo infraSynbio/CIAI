@@ -12,6 +12,7 @@ using CiaiControllerSDK.Services;
 using CiaiControllerSDK.Interfaces;
 using CiaiControllerSDK.WebServer;
 using CiaiControllerSDK.LegacyAdapter;
+using YamlDotNet.Serialization;
 
 namespace CiaiControllerSDK.ContractTests;
 
@@ -27,6 +28,8 @@ internal static class Program
         await TestDriverContractAsync();
         await TestDeclarativeConfigurationAsync();
         TestYamlContract();
+        TestMachineReadableContracts();
+        TestConfigurationPreflight();
         await TestNamedConnectionsAsync();
         await TestLegacyProcessBridgeAsync();
         await TestFileWorkflowAsync();
@@ -137,11 +140,56 @@ internal static class Program
 
     private static void TestYamlContract()
     {
+        var defaults = new HttpsOptions();
+        Assert(!defaults.UseHttps && !defaults.EnableCallback && defaults.Port == 8080 && defaults.Protocol == "TLSv1.2" &&
+               defaults.EnabledProtocols.SequenceEqual(new[] { "TLSv1.2" }) && defaults.Ciphers.Length == 0,
+            "portable HTTP/TLS defaults mismatch");
+
+        var omittedServer = YamlConfigLoader.Parse("device:\n  communicationType: DLL\n").ToHttpsOptions();
+        Assert(!omittedServer.UseHttps && omittedServer.Port == 8080,
+            "omitted server section should use safe HTTP defaults");
+
+        var sample = YamlConfigLoader.Load(Path.Combine(AppContext.BaseDirectory, "application.sample.yml"));
+        Assert(!sample.ToHttpsOptions().UseHttps &&
+               sample.ToDeviceConfiguration().CommunicationType == CommunicationType.Serial,
+            "published C# sample configuration must parse and use safe defaults");
+        Assert(ConfigurationValidator.Validate(sample.ToHttpsOptions(), sample.ToDeviceConfiguration())
+                .All(diagnostic => diagnostic.Severity != DiagnosticSeverity.Error),
+            "published C# sample configuration must pass hardware-free validation");
+
+        var heartbeat = new HeartBeatInfo();
+        using var heartbeatJson = JsonDocument.Parse(JsonSerializer.Serialize(heartbeat));
+        Assert(DateTimeOffset.TryParse(
+                   heartbeatJson.RootElement.GetProperty("heartBeatTime").GetString(), out _),
+            "heartbeat time must contain a parseable UTC offset");
+
+        const string commentOnlyEnvironmentYaml = @"# Optional HTTPS password: ${CIAI_SDK_COMMENT_ENV_MUST_NOT_BE_READ}
+server:
+  port: 8080
+  host: localhost
+  useHttps: false
+device:
+  communicationType: DLL
+";
+        Assert(YamlConfigLoader.Parse(commentOnlyEnvironmentYaml).Server.Port == 8080,
+            "environment placeholders in YAML comments must not be expanded");
+
+        const string invalidClientAuthYaml = @"server:
+  useHttps: false
+  clientAuth:
+    enabled: true
+    mode: typo
+device:
+  communicationType: DLL
+";
+        AssertThrows<ArgumentException>(
+            () => YamlConfigLoader.Parse(invalidClientAuthYaml).ToHttpsOptions(),
+            "unknown client authentication mode should be rejected");
+
         const string dllYaml = @"server:
   port: 8080
   host: ""127.0.0.1""
   useHttps: false
-  # Commented HTTPS example must not require ${CIAI_SDK_TEST_COMMENT_ONLY_MISSING}.
   maxConcurrentRequests: 12
   maxRequestBodyBytes: 4096
   functionQueueCapacity: 7
@@ -167,9 +215,6 @@ device:
         var device = config.ToDeviceConfiguration();
         Assert(options.Port == 8080 && !options.UseHttps && !options.EnableCallback,
             "server/callback YAML mapping mismatch");
-        Assert(options.Protocol == "TLSv1.2" && options.EnabledProtocols.SequenceEqual(new[] { "TLSv1.2" }) &&
-               options.Ciphers.Length == 0,
-            "portable TLS defaults were not preserved");
         Assert(options.MaxConcurrentRequests == 12 && options.MaxRequestBodyBytes == 4096 &&
                options.FunctionQueueCapacity == 7 && options.IdempotencyCapacity == 20 &&
                options.ShutdownTimeoutMs == 2000,
@@ -258,6 +303,92 @@ device:
         AssertThrows<ArgumentException>(
             () => YamlConfigLoader.Parse(unknownCommunicationYaml).ToDeviceConfiguration(),
             "unknown communication type should not silently fall back to TCP");
+    }
+
+    private static void TestConfigurationPreflight()
+    {
+        var invalidSerial = DeviceConfiguration.CreateSerial("serial", "COM1", baudRate: 0,
+            dataBits: 9, stopBits: 3, parity: "invalid", encoding: "invalid");
+        var serialDiagnostics = ConfigurationValidator.Validate(invalidSerial);
+        Assert(serialDiagnostics.Any(d => d.Severity == DiagnosticSeverity.Error &&
+                                          d.Path == "device.serial"),
+            "legacy serial settings must be validated before opening the port");
+
+        var invalidNamed = DeviceConfiguration.CreateDll("named-invalid");
+        invalidNamed.Connections["api"] = new ConnectionConfiguration
+        {
+            Name = "api",
+            Type = "http",
+            BaseUrl = "ftp://device",
+            MaxConcurrency = 0
+        };
+        Assert(ConfigurationValidator.Validate(invalidNamed)
+                .Any(d => d.Severity == DiagnosticSeverity.Error &&
+                          d.Path == "device.connections.api"),
+            "named connection URL and resource settings must be validated");
+
+        var tempPath = Path.Combine(Path.GetTempPath(), $"ciai-preflight-{Guid.NewGuid():N}.yml");
+        try
+        {
+            File.WriteAllText(tempPath, "server:\n  useHttps: false\ndevice:\n  communicationType: DLL\n");
+            var report = DriverHost.ValidateConfiguration(tempPath);
+            Assert(report.IsValid && report.HasWarnings && report.ConfigPath == Path.GetFullPath(tempPath),
+                "device-free configuration preflight should return warnings without starting hardware");
+
+            File.WriteAllText(tempPath, "server:\n  useHttps: false\n");
+            report = DriverHost.ValidateConfiguration(tempPath);
+            Assert(!report.IsValid && report.Diagnostics.Any(d => d.Path == "device"),
+                "configuration preflight must reject a missing device section");
+
+            var adapterName = Path.GetFileNameWithoutExtension(tempPath) + "-adapter";
+            var adapterDirectory = Path.Combine(Path.GetDirectoryName(tempPath)!, adapterName);
+            Directory.CreateDirectory(adapterDirectory);
+            File.WriteAllBytes(Path.Combine(adapterDirectory, "adapter.exe"), Array.Empty<byte>());
+            File.WriteAllText(tempPath, "server:\n  useHttps: false\ndevice:\n  deviceId: process\n" +
+                                        "  connections:\n    vendor:\n      type: process\n      default: true\n" +
+                                        $"      workingDirectory: ./{adapterName}\n      executable: adapter.exe\n");
+            report = DriverHost.ValidateConfiguration(tempPath);
+            Assert(report.IsValid,
+                "process paths relative to application.yml should resolve without changing working directory");
+            File.Delete(Path.Combine(adapterDirectory, "adapter.exe"));
+            Directory.Delete(adapterDirectory);
+
+            File.WriteAllText(tempPath, "server:\n  useHttps: false\ndevice:\n  communicationType: DLL\n" +
+                                        "  settings:\n    vendorFile: ./vendor/options.json\n");
+            var deviceConfig = YamlConfigLoader.Load(tempPath).ToDeviceConfiguration();
+            Assert(deviceConfig.ResolvePath(deviceConfig.GetExtraSetting<string>("vendorFile")) ==
+                   Path.GetFullPath(Path.Combine(Path.GetDirectoryName(tempPath)!, "vendor/options.json")),
+                "vendor setting paths should resolve relative to application.yml");
+        }
+        finally
+        {
+            if (File.Exists(tempPath)) File.Delete(tempPath);
+        }
+    }
+
+    private static void TestMachineReadableContracts()
+    {
+        var specDirectory = Path.Combine(AppContext.BaseDirectory, "spec");
+        var openApiText = File.ReadAllText(Path.Combine(specDirectory,
+            "ciai-driver-api.openapi.yaml"));
+        var openApi = new DeserializerBuilder().Build()
+            .Deserialize<Dictionary<object, object>>(openApiText);
+        var paths = (Dictionary<object, object>)openApi["paths"];
+        var expected = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "/Info", "/HeartBeat", "/Function", "/Operation", "/Set", "/Get", "/EnterAndExit"
+        };
+        Assert(paths.Keys.Select(key => key.ToString()).ToHashSet(StringComparer.Ordinal)
+                .SetEquals(expected),
+            "OpenAPI must contain exactly the seven implemented endpoints");
+
+        using var schema = JsonDocument.Parse(File.ReadAllText(Path.Combine(specDirectory,
+            "application.schema.json")));
+        Assert(schema.RootElement.GetProperty("$schema").GetString()!
+                .Contains("2020-12", StringComparison.Ordinal),
+            "configuration schema must use JSON Schema 2020-12");
+        Assert(schema.RootElement.GetProperty("required")[0].GetString() == "device",
+            "configuration schema must require the device section");
     }
 
     private static async Task TestNamedConnectionsAsync()

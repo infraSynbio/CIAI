@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -34,9 +36,76 @@ namespace CiaiControllerSDK.WebServer
             CancellationToken cancellationToken = default, ILoggerFactory loggerFactory = null)
             where TDriver : DeviceDriverBase
         {
-            var config = YamlConfigLoader.Load(configPath);
+            var config = YamlConfigLoader.Load(ResolveConfigPath(configPath));
+            if (config.Device == null)
+                throw new ConfigurationValidationException(new[]
+                {
+                    new ConfigurationDiagnostic
+                    {
+                        Severity = DiagnosticSeverity.Error,
+                        Path = "device",
+                        Message = "必须配置device节点"
+                    }
+                });
             return RunAsync<TDriver>(config.ToHttpsOptions(), config.ToDeviceConfiguration(),
                 cancellationToken, loggerFactory);
+        }
+
+        /// <summary>加载并检查配置，不创建驱动、不连接设备、不启动端口。</summary>
+        public static ConfigurationValidationReport ValidateConfiguration(
+            string configPath = "application.yml")
+        {
+            var resolvedPath = ResolveConfigPath(configPath);
+            try
+            {
+                var config = YamlConfigLoader.Load(resolvedPath);
+                if (config.Device == null)
+                {
+                    return new ConfigurationValidationReport(resolvedPath, new[]
+                    {
+                        new ConfigurationDiagnostic
+                        {
+                            Severity = DiagnosticSeverity.Error,
+                            Path = "device",
+                            Message = "必须配置device节点"
+                        }
+                    });
+                }
+
+                return new ConfigurationValidationReport(resolvedPath,
+                    ConfigurationValidator.Validate(config.ToHttpsOptions(),
+                        config.ToDeviceConfiguration()));
+            }
+            catch (Exception ex) when (ex is not ConfigurationValidationException)
+            {
+                return new ConfigurationValidationReport(resolvedPath, new[]
+                {
+                    new ConfigurationDiagnostic
+                    {
+                        Severity = DiagnosticSeverity.Error,
+                        Path = "configuration",
+                        Message = ex.Message
+                    }
+                });
+            }
+        }
+
+        /// <summary>
+        /// 解析配置路径：优先采用调用者工作目录，其次采用可执行文件所在目录。
+        /// </summary>
+        public static string ResolveConfigPath(string configPath = "application.yml")
+        {
+            if (string.IsNullOrWhiteSpace(configPath))
+                throw new ArgumentException("配置文件路径不能为空", nameof(configPath));
+
+            if (Path.IsPathRooted(configPath))
+                return Path.GetFullPath(configPath);
+
+            var workingDirectoryCandidate = Path.GetFullPath(configPath);
+            if (File.Exists(workingDirectoryCandidate))
+                return workingDirectoryCandidate;
+
+            return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configPath));
         }
 
         /// <summary>
@@ -67,9 +136,18 @@ namespace CiaiControllerSDK.WebServer
             ILoggerFactory loggerFactory = null)
             where TDriver : DeviceDriverBase
         {
+            // 在创建驱动、通信和请求处理器之前应用日志工厂，保证整个SDK使用同一日志后端。
+            if (loggerFactory != null)
+            {
+                LoggerProvider.SetLoggerFactory(loggerFactory);
+            }
+
             // 使用传入的日志工厂或默认工厂
             var factory = loggerFactory ?? LoggerProvider.Factory;
             var logger = factory.CreateLogger(nameof(DriverHost));
+
+            var config = deviceConfig ?? new DeviceConfiguration();
+            ConfigurationValidator.ValidateAndThrow(options, config);
 
             // 验证驱动类型
             var driverType = typeof(TDriver);
@@ -86,7 +164,6 @@ namespace CiaiControllerSDK.WebServer
             logger.LogInformation("版本: {Version}", driverAttr.Version);
 
             // 创建驱动实例
-            var config = deviceConfig ?? new DeviceConfiguration();
             await using var driver = CreateDriverInstance<TDriver>(config);
 
             // 初始化驱动
@@ -228,7 +305,7 @@ namespace CiaiControllerSDK.WebServer
         }
 
         /// <summary>
-        /// 启用HTTPS模式（默认）
+        /// 显式启用HTTPS模式
         /// </summary>
         public HttpsOptionsBuilder UseHttps(bool useHttps = true)
         {

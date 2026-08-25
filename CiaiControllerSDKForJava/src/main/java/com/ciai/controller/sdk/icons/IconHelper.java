@@ -1,7 +1,7 @@
 package com.ciai.controller.sdk.icons;
 
+import com.ciai.controller.sdk.logging.LoggerProvider;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -16,7 +16,7 @@ import java.util.Base64;
  */
 public final class IconHelper {
 
-    private static final Logger logger = LoggerFactory.getLogger(IconHelper.class);
+    private static final Logger logger = LoggerProvider.createLogger(IconHelper.class);
 
     private static String iconFolderPath = "icon";
 

@@ -5,8 +5,8 @@ import com.ciai.controller.sdk.model.Result;
 import com.ciai.controller.sdk.model.RegisterInfo;
 import com.ciai.controller.sdk.model.HeartBeatInfo;
 import com.ciai.controller.sdk.model.GetReturn;
+import com.ciai.controller.sdk.logging.LoggerProvider;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -17,7 +17,7 @@ import java.util.List;
  */
 public class RouteBuilder {
 
-    private static final Logger logger = LoggerFactory.getLogger(RouteBuilder.class);
+    private static final Logger logger = LoggerProvider.createLogger(RouteBuilder.class);
 
     /**
      * API端点常量

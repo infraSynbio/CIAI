@@ -1,0 +1,4 @@
+interface:
+  display_name: "CIAI2 驱动开发与迁移"
+  short_description: "按证据清单开发、迁移并验证CIAI2多协议及旧DLL驱动"
+  default_prompt: "使用 $device-driver-migration 先盘点设备文档或旧驱动并建立能力、配置、通信和状态证据表，再选择连接与隔离方式，开发并分层验证最新 CIAI2 驱动；未知协议语义不得猜测。"

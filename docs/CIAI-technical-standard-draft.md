@@ -31,9 +31,9 @@
 - 所有量化指标补充取值依据与设定原因（附录E）；
 - 原规范性附录调整为资料性附录，代码示例与配置模板移入附录；
 - 章节按分部分、大拆小原则重构，支持单章节独立引用与修订；
-- **安全要求升级**：TLS最低版本由1.2提升为强制TLS 1.3，客户端认证由可选双向认证（mTLS）提升为强制mTLS（NEED模式）；
+- **安全配置分级**：开发/受控内网可使用默认HTTP，生产按风险显式启用HTTPS；TLS 1.2为跨运行时基线，全链路验证后推荐TLS 1.3，高风险控制网络推荐mTLS（NEED模式）；
 - 新增完整注解参考（第11.3节）、日志与图标管理规范（第11.5-11.7节）、驱动实例管理（第11.8节）、配置校验规范（第11.9节）；
-- 补充错误码定义（notfound/badrequest/forbidden/error）、数据模型字段完善（ResultOutput name/resultData, EquipmentSetInfo setValue）、通信配置参数完善（Serial细粒度参数、readWriteTimeout等）；
+- 补充错误码定义（notfound/badrequest/forbidden/error）、数据模型字段完善（ResultOutput name/resultData, EquipmentSetInfo setValue）、通信配置参数完善（Serial细粒度参数及独立连接/读/写超时等）；
 - 新增YAML配置完整层级结构（附录D.1）。
 
 ---
@@ -189,27 +189,27 @@ CIAI采用**驱动端服务化**架构：每台设备运行一个独立的驱动
 | 应用层协议 | HTTP/1.1 或 HTTPS |
 | 数据格式 | JSON（UTF-8编码） |
 | Content-Type | `application/json; charset=UTF-8` |
-| 默认端口 | 443（HTTPS）/ 8080（HTTP） |
+| SDK默认端口 | 8080（HTTP，开发/受控内网配置） |
 | 连接模式 | 长连接，支持Keep-Alive |
 
 **量化指标取值依据**：
-- 端口443/8080：遵循IANA端口注册标准——443为HTTPS默认端口，8080为HTTP常用备用端口。
+- SDK以8080作为无需证书的首次运行默认值；生产端口由部署网络与安全策略确定，HTTPS通常使用443或受控专用端口。
 - UTF-8编码：兼容中英文标识与特殊字符，是JSON标准（RFC 8259）规定的默认编码。
 
-### 6.2 HTTPS/TLS安全要求（所有环境强制）
+### 6.2 HTTPS/TLS安全要求（生产部署）
 
 | 项目 | 要求 |
 |------|------|
-| TLS版本 | **强制 TLS 1.3**（RFC 8446） |
-| 加密套件（TLS 1.3） | `TLS_AES_256_GCM_SHA384`, `TLS_CHACHA20_POLY1305_SHA256` |
+| TLS版本 | TLS 1.2为Java 8/.NET 6/8共同基线；全链路验证后推荐TLS 1.3 |
+| 加密套件 | 默认使用JVM/操作系统安全策略；固定套件前必须逐一验证目标运行时 |
 | 服务端证书 | PKCS12格式（.pfx/.p12），由受信任CA签发 |
-| 客户端认证 | **强制双向认证（mTLS）**，模式：`NEED` |
+| 客户端认证 | 根据部署风险选择 `NONE`、`WANT` 或 `NEED`；高风险控制网络推荐mTLS `NEED` |
 | 信任锚 | 支持配置独立TrustStore（PKCS12格式）或复用KeyStore |
 
-**量化指标取值依据**：
-- **TLS 1.3为唯一允许版本**：TLS 1.3（RFC 8446）于2018年发布，是当前最新的TLS标准；TLS 1.2（RFC 5246）中保留的多个已弃用加密套件（如CBC模式套件、RSA密钥交换）存在已知攻击面（Lucky13、POODLE、ROBOT等）。TLS 1.3移除了这些不安全组件，仅保留AEAD加密套件。鉴于合成生物制造涉及高价值生物样本与敏感实验数据，本标准强制要求TLS 1.3，不再向下兼容TLS 1.2。TLS 1.0/1.1已于2021年被IETF正式废弃（RFC 8996），明确排除。
-- **双向认证（mTLS）为强制要求**：mTLS确保驱动与平台之间的双向身份验证——平台确认驱动的合法性以防止伪造设备接入，驱动确认平台的合法性以防止未授权调度系统控制设备。在涉及生物安全操作的场景下，设备被未授权方操控可能造成生物泄漏或样本损毁，因此本标准强制mTLS，不再允许WANT/NONE模式。
-- AES-256-GCM与ChaCha20-Poly1305均为AEAD加密套件，提供认证加密（Authenticated Encryption with Associated Data），符合NIST SP 800-52 Rev.2对TLS服务端的最高加密强度要求。
+**实施依据**：
+- TLS 1.2是Java 8、Java 11+与.NET 6/8可共同部署的基线；TLS 1.0/1.1明确排除。TLS 1.3只有在全部目标JVM、操作系统策略、代理和客户端完成真实握手验证后启用。
+- mTLS可同时验证平台与驱动身份，但证书生命周期和现场运维成本更高，应由组织风险评估决定；涉及高风险机械动作、样本或生产网络时推荐 `NEED`。
+- SDK示例默认HTTP且关闭回调，便于首次运行。生产环境应使用HTTPS/mTLS或等效的受控网络保护；一旦配置HTTPS，证书或环境变量错误必须阻止启动，不能静默降级到HTTP。
 
 ### 6.3 请求/响应封装规范
 
@@ -715,8 +715,8 @@ SDK提供全局驱动实例注册与查找机制（C#: `DeviceDriverFactory`）�
 | 端口范围 | 1–65535，超出抛出 `IllegalArgumentException` |
 | 证书路径 | HTTPS模式下证书路径必须配置且文件存在 |
 | 信任库路径 | 如配置独立信任库，路径必须有效且文件存在 |
-| TLS协议 | 必须为 "TLSv1.3"，其他值拒绝 |
-| 客户端认证模式 | 必须为 "NEED"，其他值拒绝 |
+| TLS协议 | 启用HTTPS时必须是目标运行时明确支持的TLS 1.2或TLS 1.3，不允许TLS 1.0/1.1 |
+| 客户端认证模式 | 必须是 `NONE`、`WANT` 或 `NEED`；启用客户端证书时必须配置可验证的信任来源 |
 
 校验失败时驱动须拒绝启动，不得以降级模式（如自动切换到HTTP）运行。
 
@@ -728,24 +728,24 @@ SDK提供全局驱动实例注册与查找机制（C#: `DeviceDriverFactory`）�
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| port | int | 443 | 服务监听端口 |
+| port | int | 8080 | 服务监听端口 |
 | host | string | "localhost" | 监听地址，"0.0.0.0"表示所有网络接口 |
-| useHttps | boolean | true | 是否启用HTTPS（强制true） |
-| certificatePath | string | — | 服务端证书路径（PKCS12 .pfx/.p12） |
-| certificatePassword | string | — | 证书密码 |
-| keyStoreType | string | "PKCS12" | 密钥库类型 |
-| keyAlias | string | — | 密钥别名（证书包含多个密钥时指定） |
-| trustStorePath | string | — | 信任库路径（空则复用KeyStore证书） |
-| trustStorePassword | string | — | 信任库密码 |
-| trustStoreType | string | "PKCS12" | 信任库类型 |
-| protocol | string | "TLSv1.3" | TLS协议版本 |
-| enabledProtocols | string[] | ["TLSv1.3"] | 启用的协议列表 |
-| ciphers | string[] | 见6.2 | 加密套件列表 |
-| clientAuth | string | "NEED" | 客户端认证模式 |
-| trustedClientThumbprints | string[] | — | 受信客户端证书指纹列表 |
-| trustedIssuerThumbprints | string[] | — | 受信签发CA证书指纹列表 |
+| useHttps | boolean | false | 是否显式启用HTTPS |
+| certificate.path | string | — | 服务端证书路径（PKCS12 .pfx/.p12） |
+| certificate.password | string | — | 证书密码，建议使用环境变量 |
+| certificate.type | string | "PKCS12" | 密钥库类型 |
+| certificate.alias | string | — | 密钥别名（证书包含多个密钥时指定） |
+| trustStore.path | string | — | 信任库路径 |
+| trustStore.password | string | — | 信任库密码，建议使用环境变量 |
+| trustStore.type | string | "PKCS12" | 信任库类型 |
+| ssl.protocol | string | "TLSv1.2" | TLS协议版本（启用HTTPS时） |
+| ssl.enabledProtocols | string[] | ["TLSv1.2"] | 启用的协议列表 |
+| ssl.ciphers | string[] | [] | 留空时使用运行平台安全策略 |
+| clientAuth.mode | string | "none" | 客户端认证模式 |
+| clientAuth.trustedThumbprints | string[] | — | 受信客户端证书指纹列表 |
+| clientAuth.trustedIssuers | string[] | — | 受信签发CA证书指纹列表 |
 
-**取值依据**：`port` 默认443——生产环境采用HTTPS标准端口；`host` 默认localhost——最小权限原则，部署时按实际网络策略修改。
+**取值依据**：SDK默认HTTP/8080并关闭客户端认证，保证首次配置不依赖证书；生产部署按6.2显式启用HTTPS/mTLS。`host` 默认localhost遵循最小暴露原则，部署时按网络策略修改。
 
 ### 12.2 设备通信配置
 
@@ -753,21 +753,17 @@ SDK提供全局驱动实例注册与查找机制（C#: `DeviceDriverFactory`）�
 |------|------|--------|------|
 | deviceId | string | — | 设备实例唯一标识 |
 | communicationType | string | — | TCP / HTTP / Serial |
-| host | string | — | 设备地址（TCP模式） |
-| port | int | — | 设备端口（TCP模式） |
-| baseUrl | string | — | 设备基础URL（HTTP模式） |
-| serialPort | string | — | 串口名称（Serial模式，Windows如"COM3"，Linux如"/dev/ttyUSB0"） |
-| baudRate | int | 9600 | 波特率（Serial模式） |
-| dataBits | int | 8 | 数据位（Serial模式） |
-| stopBits | int | 1 | 停止位（Serial模式：1, 2, 3分别表示1/1.5/2位） |
-| parity | string | "none" | 校验位（Serial模式：none/odd/even/mark/space） |
-| connectionTimeout | int | 5000 | 连接超时（ms） |
-| readWriteTimeout | int | 10000 | 读写超时（ms） |
+| tcp | object | — | TCP的host、port、connect/read/write超时 |
+| http | object | — | HTTP的baseUrl及超时 |
+| serial | object | — | Serial的port、baudRate、dataBits、stopBits、parity、flowControl、DTR/RTS、编码及超时 |
+| connections | object | — | 多连接字典；键由驱动定义，可配置type、default、resourceGroup、maxConcurrency及厂商settings |
+| deviceCallResources | int | 1 | DLL/API真实调用资源，与业务并行和传输锁分离 |
+| deviceCallTimeoutMs | int | 30000 | 获取DLL/API调用资源的超时 |
 
 **取值依据**：
-- `connectionTimeout` 默认5000ms——基于局域网环境下99分位TCP建连耗时（< 500ms）的10倍安全余量；
-- `readWriteTimeout` 默认10000ms——覆盖典型设备通信指令往返耗时（< 2000ms）的5倍安全余量，同时避免长时间阻塞；
+- `connectTimeoutMs` 默认5000ms；读写超时按设备协议和动作时长分别配置；
 - `baudRate` 默认9600——工业设备最常见串口波特率，兼容大多数传统设备。
+- TCP/Serial/Modbus请求–响应连接的物理并发固定为1；HTTP/process/DLL/API仅在厂商明确支持时增加。
 
 ### 12.3 回调配置
 
@@ -775,13 +771,10 @@ SDK提供全局驱动实例注册与查找机制（C#: `DeviceDriverFactory`）�
 |------|------|--------|------|
 | url | string | — | 回调地址 |
 | timeoutMs | int | 30000 | 回调超时（ms） |
-| enabled | boolean | true | 是否启用回调 |
-| retryCount | int | 3 | 最大重试次数 |
-| retryIntervalMs | int | 5000 | 重试间隔递增基数（ms） |
+| enabled | boolean | false | 是否启用回调；启用时URL必须有效 |
 
 **取值依据**：
 - `timeoutMs` 默认30000ms——覆盖平台在正常负载下处理回调请求的95分位耗时（实测< 5s）的6倍安全余量；
-- `retryCount` 默认3次——遵循分布式系统故障重试的最佳实践，在容错与资源占用之间取得平衡；结合递增间隔策略（5s→10s→20s），总计耗时不超过35s，低于典型实验流程的容忍上限。
 
 ---
 
@@ -789,13 +782,13 @@ SDK提供全局驱动实例注册与查找机制（C#: `DeviceDriverFactory`）�
 
 ### 13.1 安全等级划分
 
-本标准强制要求所有环境启用HTTPS + TLS 1.3 + 双向认证（mTLS）：
+按部署环境和风险选择安全配置，默认HTTP仅用于本机开发或有等效边界保护的受控内网：
 
 | 环境 | 安全要求 | 依据 |
 |------|---------|------|
-| 开发环境 | HTTPS + TLS 1.3 + mTLS（可使用自签名证书） | 保证开发与生产环境安全行为一致，避免环境差异引入安全漏洞 |
-| 测试环境 | HTTPS + TLS 1.3 + mTLS（可使用自签名证书） | 验证证书链与TLS配置，与生产环境对齐 |
-| 生产环境 | HTTPS + TLS 1.3 + mTLS（必须使用CA签发证书） | 保障生物实验数据机密性与设备操作安全性，防止未授权设备接入 |
+| 本机开发 | HTTP/127.0.0.1，关闭回调；需要验证TLS时再启用测试证书 | 降低首次配置门槛并限制暴露范围 |
+| 集成测试 | 与目标生产安全配置一致，至少完成TLS 1.2真实握手；需要时验证mTLS | 在发布前发现证书链、JVM和操作系统策略差异 |
+| 生产环境 | HTTPS；TLS 1.2基线，验证后推荐TLS 1.3；高风险网络推荐mTLS NEED | 保障实验数据与设备控制链路，防止未授权接入 |
 
 ### 13.2 证书管理
 
@@ -816,11 +809,11 @@ SDK提供全局驱动实例注册与查找机制（C#: `DeviceDriverFactory`）�
 | trustStorePath | string | — | 信任库路径（空则复用KeyStore中证书） |
 | trustStorePassword | string | — | 信任库密码 |
 | trustStoreType | string | "PKCS12" | 信任库类型 |
-| protocol | string | "TLSv1.3" | SSL/TLS协议版本 |
-| enabledProtocols | string[] | ["TLSv1.3"] | 启用的协议列表 |
-| ciphers | string[] | 见6.2 | 加密套件列表 |
-| clientAuth | enum | NEED | 客户端认证模式（仅允许 NEED） |
-| requireClientCertificate | boolean | true | 是否要求客户端证书 |
+| protocol | string | "TLSv1.2" | SSL/TLS协议版本 |
+| enabledProtocols | string[] | ["TLSv1.2"] | 启用的协议列表 |
+| ciphers | string[] | [] | 留空时使用运行平台安全策略 |
+| clientAuth | enum | NONE | 客户端认证模式：NONE/WANT/NEED |
+| requireClientCertificate | boolean | false | 是否要求客户端证书 |
 | trustedClientThumbprints | string[] | — | 受信客户端证书指纹列表 |
 | trustedIssuerThumbprints | string[] | — | 受信签发CA证书指纹列表 |
 
@@ -1285,26 +1278,25 @@ public class TemperatureDriver : DeviceDriverBase
 
 ```yaml
 server:
-  port: 8443
+  port: 8080
   host: "0.0.0.0"
-  useHttps: true
-  certificatePath: "./certs/server.pfx"
-  certificatePassword: "${CERT_PASSWORD}"
-  protocol: "TLSv1.3"
-  clientAuth: "NEED"
+  useHttps: false
 
 device:
   communicationType: "TCP"
-  host: "192.168.1.100"
-  port: 5000
-  connectionTimeout: 5000
+  tcp:
+    host: "192.168.1.100"
+    port: 5000
+    connectTimeoutMs: 5000
 
 callback:
-  url: "http://platform:8080/api/callback"
+  url: ""
   timeoutMs: 30000
-  enabled: true
-  retryCount: 3
+  enabled: false
 ```
+
+生产HTTPS/mTLS配置使用两套SDK `application.sample.yml` 中的完整注释模板；仅在
+`useHttps: true` 后取消证书、信任库和TLS段的注释。
 
 ---
 
@@ -1317,9 +1309,9 @@ callback:
 ```
 DriverConfig
 ├── server (ServerConfig)
-│   ├── port: int (默认443)
+│   ├── port: int (默认8080)
 │   ├── host: string (默认"localhost")
-│   ├── useHttps: boolean (默认true)
+│   ├── useHttps: boolean (默认false)
 │   ├── certificate (CertificateConfig)
 │   │   ├── path: string
 │   │   ├── password: string
@@ -1330,18 +1322,18 @@ DriverConfig
 │   │   ├── password: string
 │   │   └── type: string (默认"PKCS12")
 │   ├── ssl (SslConfig)
-│   │   ├── protocol: string (默认"TLSv1.3")
+│   │   ├── protocol: string (默认"TLSv1.2")
 │   │   ├── enabledProtocols: string[]
 │   │   └── ciphers: string[]
 │   └── clientAuth (ClientAuthConfig)
-│       ├── mode: string (默认"need")
-│       ├── enabled: boolean (默认true)
+│       ├── mode: string (默认"none")
+│       ├── enabled: boolean (默认false)
 │       ├── trustedThumbprints: string[]
 │       └── trustedIssuers: string[]
 ├── callback (CallbackConfig)
 │   ├── url: string
 │   ├── timeoutMs: int (默认30000)
-│   └── enabled: boolean (默认true)
+│   └── enabled: boolean (默认false)
 └── device (DeviceConfigSection)
     ├── deviceId: string
     ├── communicationType: string (TCP/HTTP/Serial)
@@ -1483,12 +1475,11 @@ DriverConfig
 | 3 | 4.1 | 单平台最大管理驱动数 | ≥ 200 | 大型平台设备上限2倍冗余 |
 | 4 | 5.1 | functionalResources默认值 | 1 | 单数设备物理约束 |
 | 5 | 5.1 | parallelizability默认值 | 0 | 保守防冲突策略 |
-| 6 | 6.1 | 默认端口 | 443/8080 | IANA端口注册标准 |
-| 7 | 6.2 | TLS版本 | 强制TLS 1.3 | TLS 1.2保留不安全的CBC套件与RSA密钥交换，已被TLS 1.3替代；TLS 1.0/1.1已被RFC 8996废弃 |
-| 7a | 6.2 | 客户端认证 | 强制mTLS NEED | 防止未授权方操控设备造成生物泄漏或样本损毁 |
-| 8 | 12.2 | connectionTimeout默认值 | 5000ms | 局域网TCP建连99分位 × 10 |
+| 6 | 6.1 | SDK默认端口 | 8080 | 无证书首次运行；生产端口由部署策略确定 |
+| 7 | 6.2 | TLS版本 | TLS 1.2基线，验证后推荐TLS 1.3 | 兼容Java 8/.NET 6/8并禁止TLS 1.0/1.1 |
+| 7a | 6.2 | 客户端认证 | 默认NONE；高风险部署推荐mTLS NEED | 在身份保证与证书运维成本间按风险选择 |
+| 8 | 12.2 | connectTimeoutMs默认值 | 5000ms | 局域网连接建立的保守超时基线 |
 | 9 | 12.3 | callbackTimeoutMs默认值 | 30000ms | 平台处理回调95分位 × 6 |
-| 10 | 12.3 | retryCount默认值 | 3 | 分布式系统容错最佳实践 |
 | 11 | 14.3 | 心跳轮询周期 | 5~30 s | 拥塞控制与异常发现时延平衡 |
 | 12 | 14.3 | 离线判定阈值 | 连续3次 | 单次丢包率 < 1%，3次连续概率 < 10⁻⁶ |
 | 13 | 15.1 | 同步响应上限 | ≤ 200ms | 局域网HTTP往返 × 20安全余量 |

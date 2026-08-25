@@ -2,9 +2,9 @@ package com.ciai.controller.sdk.config;
 
 import com.ciai.controller.sdk.core.CommunicationType;
 import com.ciai.controller.sdk.core.DeviceConfiguration;
+import com.ciai.controller.sdk.logging.LoggerProvider;
 import com.ciai.controller.sdk.webserver.HttpsOptions;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
  */
 public class YamlConfigLoader {
 
-    private static final Logger logger = LoggerFactory.getLogger(YamlConfigLoader.class);
+    private static final Logger logger = LoggerProvider.createLogger(YamlConfigLoader.class);
     private static final Yaml yaml = new Yaml();
     private static final Pattern ENVIRONMENT_VARIABLE = Pattern.compile(
             "\\$\\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?}");
@@ -53,6 +53,9 @@ public class YamlConfigLoader {
         Path path = Paths.get(configPath);
         if (Files.exists(path)) {
             DriverConfig config = parseOrThrow(new String(Files.readAllBytes(path), StandardCharsets.UTF_8));
+            Path configDirectory = path.toAbsolutePath().normalize().getParent();
+            config.setSourceDirectory(configDirectory == null ? null : configDirectory.toString());
+            resolveKnownRelativePaths(config, configDirectory);
             logger.info("Config loaded from file: {}", configPath);
             return config;
         }
@@ -67,6 +70,48 @@ public class YamlConfigLoader {
         }
 
         throw new IOException("Config file not found: " + configPath);
+    }
+
+    private static void resolveKnownRelativePaths(DriverConfig config, Path configDirectory) {
+        if (config == null || configDirectory == null) return;
+        if (config.getServer() != null && config.getServer().getCertificate() != null
+                && !blank(config.getServer().getCertificate().getPath())) {
+            config.getServer().getCertificate().setPath(resolvePath(configDirectory,
+                    config.getServer().getCertificate().getPath()));
+        }
+        if (config.getServer() != null && config.getServer().getTrustStore() != null
+                && !blank(config.getServer().getTrustStore().getPath())) {
+            config.getServer().getTrustStore().setPath(resolvePath(configDirectory,
+                    config.getServer().getTrustStore().getPath()));
+        }
+        if (config.getDevice() == null || config.getDevice().getConnections() == null) return;
+        for (com.ciai.controller.sdk.core.ConnectionConfiguration connection
+                : config.getDevice().getConnections().values()) {
+            if (connection == null) continue;
+            if (!blank(connection.getWorkingDirectory())) {
+                connection.setWorkingDirectory(resolvePath(configDirectory, connection.getWorkingDirectory()));
+            }
+            if (blank(connection.getExecutable())) continue;
+            Path executable = Paths.get(connection.getExecutable());
+            if (executable.isAbsolute()) continue;
+            boolean hasSeparator = connection.getExecutable().indexOf('/') >= 0
+                    || connection.getExecutable().indexOf('\\') >= 0;
+            Path candidate = hasSeparator ? configDirectory.resolve(executable)
+                    : !blank(connection.getWorkingDirectory())
+                    ? Paths.get(connection.getWorkingDirectory()).resolve(executable) : null;
+            if (candidate != null && (hasSeparator || Files.exists(candidate))) {
+                connection.setExecutable(candidate.toAbsolutePath().normalize().toString());
+            }
+        }
+    }
+
+    private static String resolvePath(Path base, String value) {
+        Path path = Paths.get(value);
+        return (path.isAbsolute() ? path : base.resolve(path)).toAbsolutePath().normalize().toString();
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     /**
@@ -122,14 +167,14 @@ public class YamlConfigLoader {
     }
 
     private static String expandEnvironmentVariables(String content) {
-        String[] lines = content.split("\n", -1);
+        String[] lines = content.split("\\n", -1);
         StringBuilder expanded = new StringBuilder(content.length());
         for (int index = 0; index < lines.length; index++) {
             String line = lines[index];
             int commentIndex = findYamlCommentIndex(line);
-            String yaml = commentIndex < 0 ? line : line.substring(0, commentIndex);
-            String comment = commentIndex < 0 ? "" : line.substring(commentIndex);
-            expanded.append(expandEnvironmentVariablesInYaml(yaml)).append(comment);
+            String yamlPart = commentIndex < 0 ? line : line.substring(0, commentIndex);
+            String commentPart = commentIndex < 0 ? "" : line.substring(commentIndex);
+            expanded.append(expandEnvironmentVariablesInYaml(yamlPart)).append(commentPart);
             if (index + 1 < lines.length) {
                 expanded.append('\n');
             }
@@ -137,8 +182,8 @@ public class YamlConfigLoader {
         return expanded.toString();
     }
 
-    private static String expandEnvironmentVariablesInYaml(String yaml) {
-        Matcher matcher = ENVIRONMENT_VARIABLE.matcher(yaml);
+    private static String expandEnvironmentVariablesInYaml(String yamlPart) {
+        Matcher matcher = ENVIRONMENT_VARIABLE.matcher(yamlPart);
         StringBuffer result = new StringBuffer();
         while (matcher.find()) {
             String value = System.getenv(matcher.group(1));
@@ -155,6 +200,7 @@ public class YamlConfigLoader {
         return result.toString();
     }
 
+    /** 找到YAML行中真正的注释起点；引号内的#不是注释。 */
     private static int findYamlCommentIndex(String line) {
         boolean inSingleQuote = false;
         boolean inDoubleQuote = false;
@@ -164,13 +210,9 @@ public class YamlConfigLoader {
             if (inDoubleQuote) {
                 if (escaped) {
                     escaped = false;
-                    continue;
-                }
-                if (character == '\\') {
+                } else if (character == '\\') {
                     escaped = true;
-                    continue;
-                }
-                if (character == '"') {
+                } else if (character == '"') {
                     inDoubleQuote = false;
                 }
                 continue;
@@ -188,13 +230,9 @@ public class YamlConfigLoader {
             }
             if (character == '"') {
                 inDoubleQuote = true;
-                continue;
-            }
-            if (character == '\'') {
+            } else if (character == '\'') {
                 inSingleQuote = true;
-                continue;
-            }
-            if (character == '#' && (index == 0 || Character.isWhitespace(line.charAt(index - 1)))) {
+            } else if (character == '#' && (index == 0 || Character.isWhitespace(line.charAt(index - 1)))) {
                 return index;
             }
         }
@@ -290,7 +328,7 @@ public class YamlConfigLoader {
                         options.setClientAuth(HttpsOptions.ClientAuthMode.NONE);
                         break;
                     default:
-                        options.setClientAuth(HttpsOptions.ClientAuthMode.NEED);
+                        throw new IllegalArgumentException("Unsupported client authentication mode: " + mode);
                 }
             }
             }
@@ -405,6 +443,7 @@ public class YamlConfigLoader {
             deviceConfig.setConnections(new LinkedHashMap<>(device.getConnections()));
         }
         deviceConfig.setExtraSettings(new LinkedHashMap<>(device.getSettings()));
+        deviceConfig.setConfigurationDirectory(config.getSourceDirectory());
 
         return deviceConfig;
     }

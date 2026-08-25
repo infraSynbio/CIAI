@@ -30,6 +30,7 @@ CiaiControllerSDK/                 .NET 6/.NET 8 SDK
 CiaiControllerSDKForJava/          Java 8+ SDK
 CiaiControllerSDK.LegacyAdapter/   老 DLL/COM 进程桥接协议
 CiaiControllerSDK.ContractTests/   .NET 契约测试
+.agents/skills/                    可复用的驱动开发与迁移 Skill
 examples/                           无厂商依赖的可运行示例
 docs/                               协议、API、安全和符合性文档
 schemas/                            JSON Schema
@@ -165,6 +166,9 @@ TCP、串口和 Modbus 类请求–响应连接始终强制为 1。HTTP、proces
 ## 文档
 
 - [CIAI 2.0 线协议](docs/protocol.md)
+- [OpenAPI 3.1](openapi/ciai-2.0.yaml)
+- [消息 JSON Schema](schemas/ciai-2.0.schema.json)
+- [application.yml JSON Schema](schemas/application.schema.json)
 - [API 参考](docs/api-reference.md)
 - [配置与通信](docs/configuration.md)
 - [安全策略](SECURITY.md)
@@ -173,6 +177,7 @@ TCP、串口和 Modbus 类请求–响应连接始终强制为 1。HTTP、proces
 - [Java SDK 指南](CiaiControllerSDKForJava/README.md)
 - [跨语言一致性](CiaiControllerSDK/PARITY.md)
 - [老 DLL/COM 适配器](CiaiControllerSDK.LegacyAdapter/README.md)
+- [AI 驱动开发与迁移 Skill](.agents/skills/device-driver-migration/SKILL.md)
 
 ## 构建与测试
 
@@ -184,6 +189,9 @@ dotnet build examples/csharp-temperature/Ciai.Example.Temperature.csproj -c Rele
 
 ```bash
 ./mvnw --batch-mode --no-transfer-progress verify
+python -m pip install -r scripts/requirements-validation.txt
+python scripts/validate_contracts.py
+python .agents/skills/device-driver-migration/scripts/validate_skill.py
 ```
 
 契约测试不需要真实设备。厂商 SDK、证书和硬件必须在各驱动项目中单独验证，不能用模拟测试替代。

@@ -9,14 +9,14 @@ namespace CiaiControllerSDK.WebServer
     public class HttpsOptions
     {
         /// <summary>
-        /// 监听端口，默认443（HTTPS）或8080（HTTP）
+        /// 监听端口，默认8080（HTTP）
         /// </summary>
-        public int Port { get; set; } = 443;
+        public int Port { get; set; } = 8080;
 
         /// <summary>
-        /// 是否启用HTTPS，默认true
+        /// 是否启用HTTPS，默认false；生产环境可在YAML中显式启用HTTPS/mTLS
         /// </summary>
-        public bool UseHttps { get; set; } = true;
+        public bool UseHttps { get; set; }
 
         /// <summary>
         /// 服务端证书文件路径（.pfx/.p12格式），HTTPS模式必需
@@ -61,7 +61,7 @@ namespace CiaiControllerSDK.WebServer
         public string TrustStoreType { get; set; } = "PKCS12";
 
         /// <summary>
-        /// SSL/TLS 协议版本，默认 TLSv1.2（兼容 Java 8 基线）
+        /// SSL/TLS 协议版本，默认 TLSv1.2，兼容 .NET 6/8 与常见部署环境
         /// 对应 Spring Boot: server.ssl.protocol
         /// </summary>
         public string Protocol { get; set; } = "TLSv1.2";
@@ -82,12 +82,12 @@ namespace CiaiControllerSDK.WebServer
         /// 客户端认证模式
         /// 对应 Spring Boot: server.ssl.client-auth
         /// </summary>
-        public ClientAuthMode ClientAuth { get; set; } = ClientAuthMode.Need;
+        public ClientAuthMode ClientAuth { get; set; } = ClientAuthMode.None;
 
         /// <summary>
-        /// 是否要求客户端证书验证，默认true（仅HTTPS模式有效）
+        /// 是否要求客户端证书验证（仅HTTPS模式有效）
         /// </summary>
-        public bool RequireClientCertificate { get; set; } = true;
+        public bool RequireClientCertificate { get; set; }
 
         /// <summary>
         /// 受信任的客户端证书指纹列表
@@ -110,9 +110,9 @@ namespace CiaiControllerSDK.WebServer
         public int CallbackTimeoutMs { get; set; } = 30000;
 
         /// <summary>
-        /// 是否启用回调，默认true（当CallbackUrl不为空时）
+        /// 是否启用回调，默认false；配置回调URL后需显式开启
         /// </summary>
-        public bool EnableCallback { get; set; } = true;
+        public bool EnableCallback { get; set; }
 
         /// <summary>
         /// 主机名，默认localhost
@@ -166,6 +166,12 @@ namespace CiaiControllerSDK.WebServer
             if (MaxConcurrentRequests <= 0 || MaxRequestBodyBytes <= 0 ||
                 FunctionQueueCapacity <= 0 || IdempotencyCapacity <= 0 || ShutdownTimeoutMs <= 0)
                 throw new ArgumentException("服务器并发、请求体、队列、幂等记录和停机超时配置必须大于0");
+            if (CallbackTimeoutMs <= 0)
+                throw new ArgumentException("回调超时必须大于0");
+            if (EnableCallback && (!Uri.TryCreate(CallbackUrl, UriKind.Absolute, out var callbackUri) ||
+                                   (callbackUri.Scheme != Uri.UriSchemeHttp &&
+                                    callbackUri.Scheme != Uri.UriSchemeHttps)))
+                throw new ArgumentException("启用回调时必须配置有效的HTTP/HTTPS回调URL");
 
             // HTTPS模式需要证书
             if (UseHttps)
@@ -261,6 +267,7 @@ namespace CiaiControllerSDK.WebServer
                 // TLS配置
                 Protocol = protocol ?? "TLSv1.2",
                 EnabledProtocols = new[] { protocol ?? "TLSv1.2" },
+                // 默认交给操作系统选择安全套件；只有部署策略明确要求时才固定列表。
                 Ciphers = ciphers ?? Array.Empty<string>(),
 
                 // 客户端认证

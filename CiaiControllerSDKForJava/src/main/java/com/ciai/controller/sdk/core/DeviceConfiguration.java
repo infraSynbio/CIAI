@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 /**
  * 设备配置类
@@ -36,6 +38,7 @@ public class DeviceConfiguration {
     private int deviceCallTimeout = 30000;
     private Map<String, ConnectionConfiguration> connections = new LinkedHashMap<>();
     private Map<String, Object> extraSettings = new LinkedHashMap<>();
+    private String configurationDirectory;
 
     public DeviceConfiguration() {
     }
@@ -302,5 +305,23 @@ public class DeviceConfiguration {
 
     public void setExtraSetting(String key, Object value) {
         extraSettings.put(key, value);
+    }
+
+    public String getConfigurationDirectory() {
+        return configurationDirectory;
+    }
+
+    public void setConfigurationDirectory(String configurationDirectory) {
+        this.configurationDirectory = configurationDirectory;
+    }
+
+    /** Resolve a vendor setting path relative to the loaded application.yml. */
+    public String resolvePath(String value) {
+        if (value == null || value.trim().isEmpty()) return value;
+        Path path = Paths.get(value);
+        if (path.isAbsolute()) return path.toAbsolutePath().normalize().toString();
+        Path base = configurationDirectory == null || configurationDirectory.trim().isEmpty()
+                ? Paths.get("").toAbsolutePath() : Paths.get(configurationDirectory);
+        return base.resolve(path).toAbsolutePath().normalize().toString();
     }
 }

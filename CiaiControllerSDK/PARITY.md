@@ -36,6 +36,9 @@
 | 动态Nest | `getDynamicEquipmentNests` | `GetDynamicEquipmentNests` | 语义由驱动作者填写 |
 | 取消/进度/事件 | instruction上下文+监听器 | instruction上下文+事件 | 不增加公开HTTP端点 |
 | 配置诊断 | 路径化错误 | 路径化错误 | 厂商未知字段保持开放 |
+| 无硬件配置预检 | `DriverHost.validateConfiguration` | `DriverHost.ValidateConfiguration` | 不创建驱动、不连接设备、不占端口 |
+| 配置相对路径 | 以驱动JAR/application.yml目录解析，`resolvePath`处理厂商路径 | 以EXE/application.yml目录解析，`ResolvePath`处理厂商路径 | adapter、workingDirectory、证书与settings路径语义一致 |
+| 机器可读契约 | 共用 OpenAPI + JSON Schema | 共用 OpenAPI + JSON Schema | 固定7端点；厂商settings开放 |
 | 文件工作流 | 路径隔离/稳定/原子写 | 同左 | 文件型设备通用辅助 |
 
 ## 共同增强

@@ -12,8 +12,8 @@ import com.ciai.controller.sdk.model.*;
 import com.ciai.controller.sdk.service.CommunicationFactory;
 import com.ciai.controller.sdk.service.ConnectionManager;
 import com.ciai.controller.sdk.config.ConfigurationValidator;
+import com.ciai.controller.sdk.logging.LoggerProvider;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -26,7 +26,7 @@ import java.util.function.Function;
  */
 public abstract class DeviceDriverBase implements AutoCloseable {
 
-    protected final Logger logger = LoggerFactory.getLogger(getClass());
+    protected final Logger logger = LoggerProvider.createLogger(getClass());
     protected static final ObjectMapper objectMapper = new ObjectMapper()
             .setDefaultPropertyInclusion(JsonInclude.Include.ALWAYS)
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);

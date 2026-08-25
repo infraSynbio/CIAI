@@ -28,6 +28,7 @@ CiaiControllerSDK/                 .NET 6/.NET 8 SDK
 CiaiControllerSDKForJava/          Java 8-compatible SDK
 CiaiControllerSDK.LegacyAdapter/   Legacy DLL/COM process bridge protocol
 CiaiControllerSDK.ContractTests/   .NET contract tests
+.agents/skills/                    Reusable driver development and migration skill
 examples/                           Runnable vendor-neutral examples
 docs/                               Protocol, API, configuration, and conformance docs
 schemas/                            JSON Schema
@@ -154,7 +155,8 @@ There is no `/FunctionSync`. Cancellation, progress, and proactive events are SD
 
 - [CIAI 2.0 wire protocol](docs/protocol.en.md)
 - [OpenAPI 3.1](openapi/ciai-2.0.yaml)
-- [JSON Schema](schemas/ciai-2.0.schema.json)
+- [Wire-message JSON Schema](schemas/ciai-2.0.schema.json)
+- [`application.yml` JSON Schema](schemas/application.schema.json)
 - [Configuration and communication](docs/configuration.md) (Chinese)
 - [API reference](docs/api-reference.md) (Chinese)
 - [Conformance](docs/conformance.md) (Chinese)
@@ -162,6 +164,7 @@ There is no `/FunctionSync`. Cancellation, progress, and proactive events are SD
 - [Java SDK guide](CiaiControllerSDKForJava/README.md) (Chinese)
 - [Security policy](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
+- [AI driver development and migration skill](.agents/skills/device-driver-migration/SKILL.md) (Chinese)
 
 ## Build and test
 
@@ -173,6 +176,9 @@ dotnet build examples/csharp-temperature/Ciai.Example.Temperature.csproj -c Rele
 
 ```bash
 ./mvnw --batch-mode --no-transfer-progress verify
+python -m pip install -r scripts/requirements-validation.txt
+python scripts/validate_contracts.py
+python .agents/skills/device-driver-migration/scripts/validate_skill.py
 ```
 
 Contract tests do not require hardware. Vendor SDK, certificate, transport, and real-device behavior must still be validated in each driver project; simulation is not hardware evidence.

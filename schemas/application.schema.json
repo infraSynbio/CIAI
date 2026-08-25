@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ciai.example/schema/application.schema.json",
+  "title": "CIAI driver application configuration",
+  "type": "object",
+  "required": ["device"],
+  "additionalProperties": false,
+  "properties": {
+    "server": { "$ref": "#/$defs/server" },
+    "callback": { "$ref": "#/$defs/callback" },
+    "device": { "$ref": "#/$defs/device" }
+  },
+  "$defs": {
+    "positiveInteger": { "type": "integer", "minimum": 1 },
+    "timeout": { "type": "integer", "minimum": 1 },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 8080 },
+        "host": { "type": "string", "minLength": 1, "default": "localhost" },
+        "useHttps": { "type": "boolean", "default": false },
+        "maxConcurrentRequests": { "$ref": "#/$defs/positiveInteger" },
+        "maxRequestBodyBytes": { "$ref": "#/$defs/positiveInteger" },
+        "functionQueueCapacity": { "$ref": "#/$defs/positiveInteger" },
+        "idempotencyCapacity": { "$ref": "#/$defs/positiveInteger" },
+        "shutdownTimeoutMs": { "$ref": "#/$defs/timeout" },
+        "allowReplaceCertificateBinding": { "type": "boolean", "default": false },
+        "certificate": {
+          "type": "object",
+          "required": ["path"],
+          "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "password": { "type": "string" },
+            "type": { "type": "string", "default": "PKCS12" },
+            "alias": { "type": "string" }
+          }
+        },
+        "trustStore": {
+          "type": "object",
+          "required": ["path"],
+          "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "password": { "type": "string" },
+            "type": { "type": "string", "default": "PKCS12" }
+          }
+        },
+        "ssl": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": { "type": "string", "default": "TLSv1.2" },
+            "enabledProtocols": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+            "ciphers": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "clientAuth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "mode": { "enum": ["none", "want", "need"], "default": "none" },
+            "trustedThumbprints": { "type": "array", "items": { "type": "string" } },
+            "trustedIssuers": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "useHttps": { "const": true } }, "required": ["useHttps"] },
+          "then": { "required": ["certificate"] }
+        }
+      ]
+    },
+    "callback": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "url": { "type": "string", "default": "" },
+        "timeoutMs": { "$ref": "#/$defs/timeout" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
+          "then": {
+            "required": ["url"],
+            "properties": {
+              "url": { "type": "string", "format": "uri", "pattern": "^https?://", "minLength": 1 }
+            }
+          }
+        }
+      ]
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "deviceId": { "type": "string", "minLength": 1 },
+        "communicationType": { "enum": ["TCP", "HTTP", "Serial", "SERIAL", "DLL", "tcp", "http", "serial", "dll"] },
+        "deviceCallResources": { "$ref": "#/$defs/positiveInteger" },
+        "deviceCallTimeoutMs": { "$ref": "#/$defs/timeout" },
+        "tcp": { "$ref": "#/$defs/tcp" },
+        "http": { "$ref": "#/$defs/http" },
+        "serial": { "$ref": "#/$defs/serial" },
+        "connections": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/connection" }
+        },
+        "settings": { "type": "object", "additionalProperties": true }
+      },
+      "anyOf": [
+        { "required": ["connections"] },
+        { "properties": { "communicationType": { "enum": ["DLL", "dll"] } }, "required": ["communicationType"] },
+        { "properties": { "communicationType": { "enum": ["TCP", "tcp"] } }, "required": ["communicationType", "tcp"] },
+        { "properties": { "communicationType": { "enum": ["HTTP", "http"] } }, "required": ["communicationType", "http"] },
+        { "properties": { "communicationType": { "enum": ["Serial", "SERIAL", "serial"] } }, "required": ["communicationType", "serial"] }
+      ]
+    },
+    "tcp": {
+      "type": "object",
+      "required": ["host", "port"],
+      "additionalProperties": false,
+      "properties": {
+        "host": { "type": "string", "minLength": 1 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "timeoutMs": { "$ref": "#/$defs/timeout" },
+        "connectTimeoutMs": { "$ref": "#/$defs/timeout" },
+        "readTimeoutMs": { "$ref": "#/$defs/timeout" },
+        "writeTimeoutMs": { "$ref": "#/$defs/timeout" }
+      }
+    },
+    "http": {
+      "type": "object",
+      "required": ["baseUrl"],
+      "additionalProperties": false,
+      "properties": {
+        "baseUrl": { "type": "string", "format": "uri", "pattern": "^https?://" },
+        "timeoutMs": { "$ref": "#/$defs/timeout" }
+      }
+    },
+    "serial": {
+      "type": "object",
+      "required": ["port"],
+      "additionalProperties": false,
+      "properties": {
+        "port": { "type": "string", "minLength": 1 },
+        "baudRate": { "$ref": "#/$defs/positiveInteger" },
+        "dataBits": { "type": "integer", "minimum": 5, "maximum": 8 },
+        "stopBits": { "enum": [1, 1.5, 2] },
+        "parity": { "enum": ["none", "odd", "even", "mark", "space"] },
+        "encoding": { "enum": ["utf-8", "utf8", "ascii", "unicode", "utf-16", "utf16", "latin1", "iso-8859-1"] },
+        "flowControl": { "enum": ["none", "xonxoff", "xon/xoff", "software", "rtscts", "rts/cts", "hardware", "both", "rtscts+xonxoff"] },
+        "dtrEnable": { "type": "boolean" },
+        "rtsEnable": { "type": "boolean" },
+        "discardInputBeforeWrite": { "type": "boolean" },
+        "timeoutMs": { "$ref": "#/$defs/timeout" },
+        "readTimeoutMs": { "$ref": "#/$defs/timeout" },
+        "writeTimeoutMs": { "$ref": "#/$defs/timeout" }
+      }
+    },
+    "connection": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "default": { "type": "boolean" },
+        "required": { "type": "boolean" },
+        "connectOnStart": { "type": "boolean" },
+        "host": { "type": "string" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "baseUrl": { "type": "string", "format": "uri" },
+        "serialPort": { "type": "string" },
+        "baudRate": { "$ref": "#/$defs/positiveInteger" },
+        "dataBits": { "type": "integer", "minimum": 5, "maximum": 8 },
+        "stopBits": { "enum": [1, 1.5, 2] },
+        "parity": { "enum": ["none", "odd", "even", "mark", "space"] },
+        "encoding": { "type": "string" },
+        "flowControl": { "type": "string" },
+        "dtrEnable": { "type": "boolean" },
+        "rtsEnable": { "type": "boolean" },
+        "discardInputBeforeWrite": { "type": "boolean" },
+        "connectTimeoutMs": { "$ref": "#/$defs/timeout" },
+        "readTimeoutMs": { "$ref": "#/$defs/timeout" },
+        "writeTimeoutMs": { "$ref": "#/$defs/timeout" },
+        "resourceWaitTimeoutMs": { "$ref": "#/$defs/timeout" },
+        "maxConcurrency": { "$ref": "#/$defs/positiveInteger" },
+        "resourceGroup": { "type": "string" },
+        "retryCount": { "type": "integer", "minimum": 0 },
+        "retryDelayMs": { "type": "integer", "minimum": 0 },
+        "retryBackoff": { "type": "number", "minimum": 1 },
+        "executable": { "type": "string" },
+        "arguments": { "type": "array", "items": { "type": "string" } },
+        "workingDirectory": { "type": "string" },
+        "architecture": { "enum": ["auto", "x86", "x64", "arm64"] },
+        "framework": { "type": "string" },
+        "apartmentState": { "enum": ["STA", "MTA", "sta", "mta"] },
+        "shutdownTimeoutMs": { "$ref": "#/$defs/timeout" },
+        "environment": { "type": "object", "additionalProperties": { "type": "string" } },
+        "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+        "settings": { "type": "object", "additionalProperties": true }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "const": "tcp" } } }, "then": { "required": ["host", "port"] } },
+        { "if": { "properties": { "type": { "enum": ["http", "https"] } } }, "then": { "required": ["baseUrl"] } },
+        { "if": { "properties": { "type": { "const": "serial" } } }, "then": { "required": ["serialPort"] } },
+        { "if": { "properties": { "type": { "enum": ["process", "legacy-process", "dll-process"] } } }, "then": { "required": ["executable"] } }
+      ]
+    }
+  }
+}

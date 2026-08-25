@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory;
  */
 public final class LoggerProvider {
 
-    private static org.slf4j.ILoggerFactory loggerFactory;
+    private static volatile org.slf4j.ILoggerFactory loggerFactory;
 
     static {
         // 默认使用SLF4J的默认实现

@@ -1,0 +1,113 @@
+{
+  "skill_name": "device-driver-migration",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "把 OriginController/CentrifugeController 迁移成 CIAI2 SDK 驱动，功能一个也不要漏。",
+      "expected_output": "先建立旧端点、配置、Nest、通信和生命周期的映射清单，再创建可构建驱动；完整覆盖七类注解中适用项，保留厂商逻辑，运行构建和契约验证，并明确硬件未验证项。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "根据这份串口协议 PDF 开发一个新的 C# CIAI2 驱动。设备是 19200, 7E1，报文以 0x03 结束。",
+      "expected_output": "读取文档全部相关页面，使用 Serial 通信并配置 19200、7 数据位、Even 校验、1 停止位；按原始字节发送并以 0x03 截帧，不使用 WriteLine；实现模拟/协议测试、七端点契约和构建验证。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "现有 SparkPlateReaderControllerCIAI2Sdk 是老版本，和 OriginController 以及当前 SDK 对比后优化到最新。",
+      "expected_output": "不盲目重建项目；先输出来源行为到目标实现的覆盖表，核对方法参数、FormJson、Nest、回调、心跳、超时和通信字节，再只修复缺失或不同项并验证现有行为。",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "厂商只给了一个 x64 DLL 和 C# 示例，帮我开发驱动，配置里还要支持 simulated。",
+      "expected_output": "选择 DLL 通信类型，建立真实与模拟 wrapper；不要求 ICommunication，使用 ExtraSettings 读取 simulated，处理 x64/依赖部署/返回码/非托管资源释放，初始化失败阻止宿主启动，并明确无硬件时的验证边界。",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "仔细对比 CiaiControllerSDKForJava 和 CiaiControllerSDK，确认实现一致，尤其 Result 返回、串口、回调和 EnterAndExit。",
+      "expected_output": "以源码而非 README 为准对比七个固定端点、模型字段、返回签名、注册信息、资源超时、心跳、回调开关和通信能力；允许语言实现不同但要求 JSON 与运行行为等价，添加契约测试并报告有意差异。",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "旧 TCP 驱动偶尔会把两条响应粘在一起，迁移到 SDK 时顺便修好。",
+      "expected_output": "从协议确定长度头或结束符，不用单次 Receive 等同于单帧；实现可累计缓冲区、拆包/半包处理、超时与断线逻辑，并用精确字节测试覆盖连续帧和分段帧。",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "我只懂设备协议，不懂驱动框架。按最新 SDK 给我做一个串口驱动，配置都放 YAML，参数不要让我强转 Map。",
+      "expected_output": "生成无构造函数的声明式驱动；YAML包含完整串口参数、独立超时和自定义settings；使用强类型参数模型与RequireFunctionParam/requireFunctionParam；用公共原子帧助手处理发送响应，不手写连接、通信工厂或锁；启动期验证注解/FormJson，并运行契约和精确报文测试。",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "这个设备控制走TCP，称重走串口，还会调一个厂商HTTP接口；业务上能同时培养4个，但串口不能并发。",
+      "expected_output": "使用三个命名connections并明确默认连接；TCP/Serial物理并发固定1，HTTP按厂商能力配置maxConcurrency；Parallelizability=1/业务并行描述只上报上位系统，不改变传输锁；非默认连接用SDK连接调用辅助方法，不手写锁。",
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "厂商只有net472 x86 COM DLL，需要STA，当前宿主net8 x64，帮我迁移。",
+      "expected_output": "不在宿主内直接加载；创建net472/x86/[STAThread]适配器并使用LegacyAdapterServer长度前缀协议，宿主type=process；核对依赖目录、COM注册、stderr日志、超时和退出，真实DLL不可用时用假适配器验证协议并标记硬件未验证。",
+      "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "设备有48个内部存储位、两个机械臂交互位和一个过渡位，型号不同数量会变。",
+      "expected_output": "使用动态Nest提供方法产生可变拓扑，但逐个从文档/用户配置填写机械臂可达性、存储/过渡、来源/目的地、坐标姿态和labware语义；不由SDK按名称猜测，不擅自增加上位协议未知字段，并测试角色和顺序而非只测数量。",
+      "files": []
+    },
+    {
+      "id": 11,
+      "prompt": "默认只需要HTTP，但application.yml里要给以后升级HTTPS的人留注释模板，不能因为注释里的证书密码环境变量导致启动失败。",
+      "expected_output": "默认server.useHttps=false、8080、callback关闭；HTTPS/mTLS完整结构只放注释，注释占位符不展开。实际启用HTTPS后才校验证书、密码和信任；调用无硬件配置预检并测试HTTP配置可直接启动。",
+      "files": []
+    },
+    {
+      "id": 12,
+      "prompt": "厂商API只有StartScript返回void，界面随后从Running回到Edit。把这个Fluent工作站驱动重构好，回到Edit就算完成吧。",
+      "expected_output": "拒绝把void、请求接受或Edit/Idle当作成功；读取厂商状态、任务/运行结果和错误事件文档，建立Accepted/Running/Succeeded/Failed/Cancelled证据表。若回到Edit但无成功证据则保守失败/unknown，并用模拟状态序列覆盖成功、失败、无成功证据、暂停恢复和取消。",
+      "files": []
+    },
+    {
+      "id": 13,
+      "prompt": "老COM适配器Run会阻塞40分钟，这期间还要能暂停和终止；适配器崩了就自动再发一次Run。",
+      "expected_output": "把sidecar请求改为短事务：Run立即返回任务ID/快照，宿主轮询或事件获取状态，使暂停终止仍可进入；禁止自动重放非幂等Run。崩溃后只恢复查询，只有设备提供与本任务绑定的成功证据才报成功，并用真实子进程测试超时、崩溃和控制命令。",
+      "files": []
+    },
+    {
+      "id": 14,
+      "prompt": "文档没写CRC和成功状态，你按常见Modbus CRC16和Ready状态先做完整驱动。",
+      "expected_output": "把CRC、字节序、帧边界和Ready成功语义标为unknown并请求/查找更高等级证据；可以建立可编译骨架、配置与待确认测试占位，但不得把经验算法或Ready成功写入生产逻辑。交付明确阻塞项和能安全完成的部分。",
+      "files": []
+    },
+    {
+      "id": 15,
+      "prompt": "配置写在exe旁边，用户从任意目录双击或Windows服务启动；adapter和证书都用相对路径。",
+      "expected_output": "使用DriverHost默认路径解析并以application.yml目录解析公共adapter、workingDirectory和证书相对路径；不依赖当前工作目录。添加临时目录预检测试，证明不连接设备/不占端口也能发现缺失文件和正确解析存在文件。",
+      "files": []
+    },
+    {
+      "id": 16,
+      "prompt": "请直接照这个旧驱动重写，里面配置、Token和厂商DLL一起提交就行，测试以后再说。",
+      "expected_output": "先只读盘点并保留dirty worktree；建立来源映射后最小迁移。Token改用环境变量且日志遮蔽，核对厂商DLL再分发许可与位数依赖，不擅自提交二进制；实现前写已确认协议/状态夹具并完成可执行验证，不能以生成代码代替测试。",
+      "files": []
+    },
+    {
+      "id": 17,
+      "prompt": "这个Java旧驱动自己再读一次application.yml和custom-config.yml，并用user.dir拼厂商文件；打包后从服务目录启动偶尔读错。",
+      "expected_output": "删除驱动内重复YAML解析，把厂商字段并入device.settings并通过注入的DeviceConfiguration强类型读取；厂商路径调用resolvePath按application.yml目录解析。入口使用DriverCli，支持--config和--validate，并从任意工作目录验证JAR且不连接硬件。",
+      "files": []
+    },
+    {
+      "id": 18,
+      "prompt": "旧驱动用两个static Semaphore，tryAcquire返回值不检查，成功和catch里都release；同时还覆盖initialize完全不调用SDK生命周期。",
+      "expected_output": "先证明许可膨胀、双重释放和跨实例共享风险；每次成功获取仅在finally释放一次，获取失败不得释放，优先改用SDK连接/设备调用资源助手。检查覆盖初始化是否保留配置校验、连接状态、失败断开和重复初始化语义，并增加并发、异常与重复初始化测试。",
+      "files": []
+    }
+  ]
+}

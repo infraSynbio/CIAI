@@ -10,4 +10,16 @@
     <ProjectReference Include="..\CiaiControllerSDK\CiaiControllerSDK.csproj" />
     <ProjectReference Include="..\CiaiControllerSDK.LegacyAdapter\CiaiControllerSDK.LegacyAdapter.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\CiaiControllerSDK\application.sample.yml"
+          Link="application.sample.yml"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\openapi\ciai-2.0.yaml"
+          Link="spec\ciai-driver-api.openapi.yaml"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\schemas\application.schema.json"
+          Link="spec\application.schema.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

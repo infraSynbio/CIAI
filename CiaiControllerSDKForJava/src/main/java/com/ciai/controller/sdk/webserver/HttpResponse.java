@@ -7,8 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ciai.controller.sdk.callback.HttpCallback;
 import com.ciai.controller.sdk.core.DeviceDriverBase;
 import com.ciai.controller.sdk.model.*;
+import com.ciai.controller.sdk.logging.LoggerProvider;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -101,7 +101,7 @@ public class HttpResponse {
  */
 class RequestHandler {
 
-    private static final Logger logger = LoggerFactory.getLogger(RequestHandler.class);
+    private static final Logger logger = LoggerProvider.createLogger(RequestHandler.class);
     private static final ObjectMapper objectMapper = new ObjectMapper()
             .setDefaultPropertyInclusion(JsonInclude.Include.ALWAYS)
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);

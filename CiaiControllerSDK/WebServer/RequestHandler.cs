@@ -44,10 +44,10 @@ namespace CiaiControllerSDK.WebServer
         /// <param name="driver">驱动实例</param>
         /// <param name="callbackUrl">回调URL（可选）</param>
         /// <param name="callbackTimeoutMs">回调超时时间</param>
-        /// <param name="enableCallback">是否启用回调</param>
-        /// <param name="functionQueueCapacity">函数调用等待队列容量</param>
-        /// <param name="idempotencyCapacity">幂等结果缓存容量</param>
-        /// <param name="shutdownTimeoutMs">关闭时等待任务完成的超时时间</param>
+        /// <param name="enableCallback">是否启用Function完成回调</param>
+        /// <param name="functionQueueCapacity">Function有界队列容量</param>
+        /// <param name="idempotencyCapacity">已接受指令幂等记录容量</param>
+        /// <param name="shutdownTimeoutMs">优雅停机等待超时</param>
         public RequestHandler(DeviceDriverBase driver, string callbackUrl = null, int callbackTimeoutMs = 30000,
             bool enableCallback = true, int functionQueueCapacity = 100,
             int idempotencyCapacity = 10000, int shutdownTimeoutMs = 30000)

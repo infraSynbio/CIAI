@@ -5,6 +5,9 @@ import com.ciai.controller.sdk.communication.TcpCommunication;
 import com.ciai.controller.sdk.communication.HttpCommunication;
 import com.ciai.controller.sdk.config.DriverConfig;
 import com.ciai.controller.sdk.config.YamlConfigLoader;
+import com.ciai.controller.sdk.config.ConfigurationDiagnostic;
+import com.ciai.controller.sdk.config.ConfigurationValidationReport;
+import com.ciai.controller.sdk.config.ConfigurationValidator;
 import com.ciai.controller.sdk.core.CommunicationType;
 import com.ciai.controller.sdk.core.DeviceConfiguration;
 import com.ciai.controller.sdk.core.DeviceDriverBase;
@@ -12,6 +15,7 @@ import com.ciai.controller.sdk.core.ConnectionConfiguration;
 import com.ciai.controller.sdk.service.ConnectionManager;
 import com.ciai.controller.sdk.service.CommunicationProviderRegistry;
 import com.ciai.controller.sdk.service.FileWorkflow;
+import com.ciai.controller.sdk.service.OwnedSemaphore;
 import com.ciai.controller.sdk.interface_.ICommunication;
 import com.ciai.controller.sdk.interface_.ICommunicationProvider;
 import com.ciai.controller.sdk.model.*;
@@ -54,12 +58,14 @@ public final class SdkContractTest {
 
     public static void main(String[] args) throws Exception {
         testYamlAndDeclarativeConfiguration();
+        testConfigurationPreflight();
         testJavaDispatchCorrectness();
         testContractValidation();
         testNamedConnections();
         testCancellationEventsAndDynamicNests();
         testFileWorkflow();
         testDeviceCallResources();
+        testOwnedSemaphoreSafety();
         testTcpTransactions();
         testTcpFraming();
         testHttpCommunication();
@@ -69,7 +75,69 @@ public final class SdkContractTest {
         System.out.println("CiaiControllerSDKForJava contract tests passed.");
     }
 
-    private static void testYamlAndDeclarativeConfiguration() {
+    private static void testOwnedSemaphoreSafety() throws Exception {
+        OwnedSemaphore semaphore = new OwnedSemaphore(1, true);
+        semaphore.release();
+        semaphore.release();
+        check(semaphore.availablePermits() == 1,
+                "unmatched releases must not inflate compatibility semaphore permits");
+        semaphore.acquire();
+        Thread foreignRelease = new Thread(semaphore::release);
+        foreignRelease.start();
+        foreignRelease.join();
+        check(semaphore.availablePermits() == 0,
+                "a different thread must not release an owned permit");
+        semaphore.release();
+        semaphore.release();
+        check(semaphore.availablePermits() == 1,
+                "each acquired permit must be released at most once");
+    }
+
+    private static void testYamlAndDeclarativeConfiguration() throws Exception {
+        HttpsOptions defaults = new HttpsOptions();
+        check(!defaults.isUseHttps() && !defaults.isEnableCallback() && defaults.getPort() == 8080
+                        && "TLSv1.2".equals(defaults.getProtocol())
+                        && Arrays.equals(defaults.getEnabledProtocols(), new String[]{"TLSv1.2"})
+                        && defaults.getCiphers().length == 0,
+                "portable HTTP/TLS defaults mismatch");
+
+        HttpsOptions omittedServer = YamlConfigLoader.toHttpsOptions(
+                YamlConfigLoader.parseOrThrow("device:\n  communicationType: DLL\n"));
+        check(!omittedServer.isUseHttps() && omittedServer.getPort() == 8080,
+                "omitted server section should use safe HTTP defaults");
+
+        DriverConfig sampleConfig = YamlConfigLoader.loadOrThrow("application.sample.yml");
+        check(!YamlConfigLoader.toHttpsOptions(sampleConfig).isUseHttps()
+                        && YamlConfigLoader.toDeviceConfiguration(sampleConfig).getCommunicationType()
+                        == CommunicationType.SERIAL,
+                "published Java sample configuration must parse and use safe defaults");
+        check(ConfigurationValidator.validate(
+                        YamlConfigLoader.toHttpsOptions(sampleConfig),
+                        YamlConfigLoader.toDeviceConfiguration(sampleConfig)).stream()
+                        .noneMatch(diagnostic -> diagnostic.getSeverity()
+                                == ConfigurationDiagnostic.Severity.ERROR),
+                "published Java sample configuration must pass hardware-free validation");
+
+        OffsetDateTime.parse(new HeartBeatInfo().getHeartBeatTime());
+
+        DriverConfig commentsParsed = YamlConfigLoader.parseOrThrow(
+                "# Optional HTTPS password: ${CIAI_SDK_COMMENT_ENV_MUST_NOT_BE_READ}\n"
+                        + "server:\n  port: 8080\n  host: localhost\n  useHttps: false\n"
+                        + "device:\n  communicationType: DLL\n");
+        check(commentsParsed.getServer().getPort() == 8080,
+                "environment placeholders in YAML comments must not be expanded");
+
+        boolean invalidClientAuthRejected = false;
+        try {
+            YamlConfigLoader.toHttpsOptions(YamlConfigLoader.parseOrThrow(
+                    "server:\n  useHttps: false\n  clientAuth:\n    enabled: true\n    mode: typo\n"
+                            + "device:\n  communicationType: DLL\n"));
+        } catch (IllegalArgumentException expected) {
+            invalidClientAuthRejected = true;
+        }
+        check(invalidClientAuthRejected,
+                "unknown client authentication mode should be rejected");
+
         String yaml = "server:\n"
                 + "  port: 8080\n"
                 + "  host: localhost\n"
@@ -84,11 +152,6 @@ public final class SdkContractTest {
                 + "    retries: 3\n";
         DriverConfig parsed = YamlConfigLoader.parse(yaml);
         DeviceConfiguration config = YamlConfigLoader.toDeviceConfiguration(parsed);
-        HttpsOptions serverOptions = YamlConfigLoader.toHttpsOptions(parsed);
-        check("TLSv1.2".equals(serverOptions.getProtocol())
-                        && Arrays.equals(new String[]{"TLSv1.2"}, serverOptions.getEnabledProtocols())
-                        && serverOptions.getCiphers().length == 0,
-                "portable TLS defaults were not preserved");
         check(config.getCommunicationType() == CommunicationType.DLL,
                 "DLL communication type was not mapped");
         check(config.getDeviceCallResources() == 2 && config.getDeviceCallTimeout() == 4321,
@@ -127,23 +190,12 @@ public final class SdkContractTest {
         check(missingEnvironmentRejected,
                 "missing required environment variable did not produce an actionable error");
 
-        DriverConfig httpWithHttpsTemplate = YamlConfigLoader.parseOrThrow("server:\n"
-                + "  port: 8080\n"
-                + "  useHttps: false\n"
-                + "  # certificate:\n"
-                + "  #   password: \"${CIAI_SDK_TEST_COMMENT_ONLY_MISSING}\"\n"
-                + "device:\n"
-                + "  communicationType: DLL\n");
-        check(!httpWithHttpsTemplate.getServer().isUseHttps(),
-                "HTTP configuration must ignore environment placeholders in HTTPS comments");
-
         DeclarativeDriver driver = DriverHost.createDriver(DeclarativeDriver.class, config);
         check(driver.getConfiguration() == config,
                 "parameterless declarative driver did not receive host configuration");
         check(driver.initialize(), "declarative DLL driver failed to initialize");
         check(driver.getHeartBeat().getData().getHeartBeatStatus() == HeartBeatStatus.Normal.getValue(),
                 "initialized DLL driver heartbeat was reported as disconnected");
-        OffsetDateTime.parse(driver.getHeartBeat().getData().getHeartBeatTime());
         driver.close();
     }
 
@@ -175,6 +227,70 @@ public final class SdkContractTest {
         check(driver.executeFunction(typed).isSuccess() && driver.lastCount == 7,
                 "declarative typed parameter conversion failed");
         driver.close();
+    }
+
+    private static void testConfigurationPreflight() throws Exception {
+        DeviceConfiguration invalidSerial = DeviceConfiguration.createSerial("serial", "COM1", 0);
+        invalidSerial.setDataBits(9);
+        invalidSerial.setStopBits(3);
+        invalidSerial.setParity("invalid");
+        boolean serialRejected = false;
+        for (ConfigurationDiagnostic diagnostic : ConfigurationValidator.validate(invalidSerial)) {
+            if (diagnostic.getSeverity() == ConfigurationDiagnostic.Severity.ERROR
+                    && "device.serial".equals(diagnostic.getPath())) serialRejected = true;
+        }
+        check(serialRejected, "legacy serial settings must be validated before opening the port");
+
+        DeviceConfiguration invalidNamed = DeviceConfiguration.createDll("named-invalid");
+        ConnectionConfiguration api = new ConnectionConfiguration();
+        api.setName("api"); api.setType("http"); api.setBaseUrl("ftp://device"); api.setMaxConcurrency(0);
+        invalidNamed.getConnections().put("api", api);
+        boolean namedRejected = false;
+        for (ConfigurationDiagnostic diagnostic : ConfigurationValidator.validate(invalidNamed)) {
+            if (diagnostic.getSeverity() == ConfigurationDiagnostic.Severity.ERROR
+                    && "device.connections.api".equals(diagnostic.getPath())) namedRejected = true;
+        }
+        check(namedRejected, "named connection URL and resource settings must be validated");
+
+        Path configPath = Files.createTempFile("ciai-preflight-", ".yml");
+        try {
+            Files.write(configPath, Arrays.asList("server:", "  useHttps: false", "device:", "  communicationType: DLL"));
+            ConfigurationValidationReport report = DriverHost.validateConfiguration(configPath.toString());
+            check(report.isValid() && report.hasWarnings(),
+                    "device-free configuration preflight should return warnings without starting hardware");
+
+            Files.write(configPath, Arrays.asList("server:", "  useHttps: false"));
+            report = DriverHost.validateConfiguration(configPath.toString());
+            check(!report.isValid() && "device".equals(report.getDiagnostics().get(0).getPath()),
+                    "configuration preflight must reject a missing device section");
+
+            String adapterName = configPath.getFileName().toString().replace(".yml", "-adapter");
+            Path adapterDirectory = configPath.getParent().resolve(adapterName);
+            Files.createDirectories(adapterDirectory);
+            Path adapter = adapterDirectory.resolve("adapter.exe");
+            Files.write(adapter, new byte[0]);
+            Files.write(configPath, Arrays.asList(
+                    "server:", "  useHttps: false", "device:", "  deviceId: process",
+                    "  connections:", "    vendor:", "      type: process", "      default: true",
+                    "      workingDirectory: ./" + adapterName, "      executable: adapter.exe"));
+            report = DriverHost.validateConfiguration(configPath.toString());
+            check(report.isValid(),
+                    "process paths relative to application.yml should resolve without changing working directory");
+            Files.delete(adapter);
+            Files.delete(adapterDirectory);
+
+            Files.write(configPath, Arrays.asList(
+                    "server:", "  useHttps: false", "device:", "  communicationType: DLL",
+                    "  settings:", "    vendorFile: ./vendor/options.json"));
+            DeviceConfiguration deviceConfig = YamlConfigLoader.toDeviceConfiguration(
+                    YamlConfigLoader.loadOrThrow(configPath.toString()));
+            check(deviceConfig.resolvePath(deviceConfig.getExtraSetting("vendorFile", String.class))
+                            .equals(configPath.getParent().resolve("vendor/options.json")
+                                    .toAbsolutePath().normalize().toString()),
+                    "vendor setting paths should resolve relative to application.yml");
+        } finally {
+            Files.deleteIfExists(configPath);
+        }
     }
 
     private static void testContractValidation() {

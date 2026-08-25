@@ -3,8 +3,8 @@ package com.ciai.controller.sdk.communication;
 import com.ciai.controller.sdk.interface_.ICommunication;
 import com.ciai.controller.sdk.interface_.IFramedCommunication;
 import com.fazecast.jSerialComm.SerialPort;
+import com.ciai.controller.sdk.logging.LoggerProvider;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -22,7 +22,7 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class SerialCommunication implements IFramedCommunication, AutoCloseable {
 
-    private static final Logger logger = LoggerFactory.getLogger(SerialCommunication.class);
+    private static final Logger logger = LoggerProvider.createLogger(SerialCommunication.class);
 
     private final String portName;
     private final int baudRate;

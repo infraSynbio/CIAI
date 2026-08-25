@@ -65,7 +65,7 @@ namespace CiaiControllerSDK.Services
             if (string.IsNullOrWhiteSpace(c.Name)) throw new ArgumentException("连接名称不能为空");
             if (c.ConnectTimeoutMs <= 0 || c.ReadTimeoutMs <= 0 || c.WriteTimeoutMs <= 0)
                 throw new ArgumentException($"连接 {c.Name} 的超时必须大于0");
-            if (c.ResourceWaitTimeoutMs <= 0 || c.EffectiveMaxConcurrency <= 0)
+            if (c.ResourceWaitTimeoutMs <= 0 || c.MaxConcurrency <= 0)
                 throw new ArgumentException($"连接 {c.Name} 的资源参数必须大于0");
             if (c.RetryCount < 0 || c.RetryDelayMs < 0 || c.RetryBackoff < 1)
                 throw new ArgumentException($"连接 {c.Name} 的重试参数无效");
@@ -88,6 +88,14 @@ namespace CiaiControllerSDK.Services
         {
             if (string.IsNullOrWhiteSpace(c.SerialPort))
                 throw new ArgumentException($"串口连接 {c.Name} 必须配置port");
+            if (c.BaudRate <= 0)
+                throw new ArgumentException($"串口连接 {c.Name} 的baudRate必须大于0");
+            if (c.DataBits is < 5 or > 8)
+                throw new ArgumentException($"串口连接 {c.Name} 的dataBits必须在5..8之间");
+            _ = ParseStopBits(c.StopBits);
+            _ = ParseParity(c.Parity);
+            _ = ParseEncoding(c.Encoding);
+            _ = ParseHandshake(c.FlowControl);
         }
 
         private static void ValidateProcess(ConnectionConfiguration c)

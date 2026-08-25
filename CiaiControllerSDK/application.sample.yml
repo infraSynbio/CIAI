@@ -1,4 +1,5 @@
-# Copy to application.yml. HTTP is the safe local-development default.
+# CiaiControllerSDK 声明式配置示例
+# 默认使用HTTP，复制后只需填写设备连接和设备专属settings即可启动。
 server:
   host: "0.0.0.0"
   port: 12345
@@ -8,26 +9,33 @@ server:
   functionQueueCapacity: 100
   idempotencyCapacity: 10000
   shutdownTimeoutMs: 30000
+  allowReplaceCertificateBinding: false
 
-  # HTTPS / mTLS template. Uncomment only when useHttps is true.
+  # ---------- 可选：HTTPS / 双向TLS ----------
+  # 启用时将useHttps改为true，再取消以下配置的注释。
+  # 注释中的环境变量不会被SDK读取；未启用HTTPS时不需要设置证书密码。
   # certificate:
   #   path: "./certs/server.pfx"
-  #   password: "${CIAI_SERVER_CERT_PASSWORD}"
+  #   password: "${SERVER_CERT_PASSWORD}"
   #   type: "PKCS12"
   #   alias: "server"
+  #
   # trustStore:
   #   path: "./certs/client-trust.pfx"
-  #   password: "${CIAI_TRUST_STORE_PASSWORD}"
+  #   password: "${TRUST_STORE_PASSWORD}"
   #   type: "PKCS12"
+  #
   # ssl:
-  #   # TLSv1.2 works on the supported Java 8 baseline. Use TLSv1.3 only
-  #   # when every deployed runtime and operating system supports it.
   #   protocol: "TLSv1.2"
   #   enabledProtocols:
   #     - "TLSv1.2"
+  #   # 默认不配置ciphers，由操作系统/JVM采用安全策略。
+  #   # 只有部署规范明确指定时才填写，并确保运行环境支持。
+  #
   # clientAuth:
   #   enabled: true
-  #   mode: "need" # need=required, want=optional, none=disabled
+  #   mode: "need" # need=必须；want=可选；none=关闭
+  # ---------- HTTPS配置结束 ----------
 
 callback:
   enabled: false
@@ -36,46 +44,37 @@ callback:
 
 device:
   deviceId: "my-device-001"
-
-  # A driver that directly wraps a DLL/API can use DLL without a connection.
-  communicationType: "DLL"
+  communicationType: "Serial" # TCP / Serial / HTTP / DLL
+  # 厂商DLL/API调用资源数；TCP和串口物理事务始终由SDK强制串行。
+  # 这与上位系统的FunctionalResources/Parallelizability是两种不同概念。
   deviceCallResources: 1
   deviceCallTimeoutMs: 30000
 
-  # For one TCP/HTTP/serial connection, replace communicationType and uncomment
-  # only the corresponding block. TCP and serial are always serialized by the SDK.
-  # communicationType: "TCP"
+  serial:
+    port: "COM3"
+    baudRate: 9600
+    dataBits: 8
+    stopBits: 1
+    parity: "none"
+    timeoutMs: 5000
+    readTimeoutMs: 5000
+    writeTimeoutMs: 5000
+    encoding: "utf-8"
+    flowControl: "none" # none / xonxoff / rtscts / both
+    dtrEnable: false
+    rtsEnable: false
+    discardInputBeforeWrite: false
+
+  # TCP设备改用以下配置：
   # tcp:
   #   host: "192.168.1.100"
   #   port: 5000
   #   connectTimeoutMs: 5000
   #   readTimeoutMs: 10000
-  #   writeTimeoutMs: 5000
-  #
-  # communicationType: "HTTP"
-  # http:
-  #   baseUrl: "http://192.168.1.100/api"
-  #   timeoutMs: 30000
-  #   headers:
-  #     Authorization: "Bearer ${VENDOR_TOKEN}"
-  #
-  # communicationType: "Serial"
-  # serial:
-  #   port: "COM3"
-  #   baudRate: 9600
-  #   dataBits: 8
-  #   stopBits: 1
-  #   parity: "none"
-  #   flowControl: "none"
-  #   dtrEnable: false
-  #   rtsEnable: false
-  #   discardInputBeforeWrite: false
-  #   readTimeoutMs: 5000
-  #   writeTimeoutMs: 5000
-  #   encoding: "utf-8"
+  #   writeTimeoutMs: 10000
 
-  # Use named connections only for devices with multiple physical channels.
-  # The key below is the name used by ExecuteConnectionCallAsync/executeConnectionCall.
+  # 多连接或老DLL进程适配器使用connections；键名完全由驱动代码选择，
+  # 例如GetCommunication("balance")。它不依赖设备名或厂商名。
   # connections:
   #   control:
   #     type: "tcp"
@@ -87,15 +86,21 @@ device:
   #     type: "serial"
   #     serialPort: "COM4"
   #     baudRate: 9600
-  #     maxConcurrency: 1
-  #   vendor:
+  #     resourceGroup: "shared-device-bus"
+  #   vendorApi:
   #     type: "process"
   #     executable: "./adapter/VendorAdapter.exe"
-  #     architecture: "x86"
+  #     workingDirectory: "./adapter"
   #     framework: "net472"
+  #     architecture: "x86"
   #     apartmentState: "STA"
   #     maxConcurrency: 1
+  #     resourceGroup: "vendor-runtime"
 
-  # Vendor-specific options are bound to a typed options class by the driver.
+  # 所有厂商专属选项都放在settings下；SDK会保留嵌套结构，
+  # 驱动可将其转换为自己的强类型配置类并给出字段级诊断。
   settings:
-    simulated: true
+    simulated: false
+    protocol:
+      station: 1
+      checksum: "crc16"

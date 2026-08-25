@@ -14,6 +14,15 @@ public class DriverConfig {
     private ServerConfig server;
     private CallbackConfig callback;
     private DeviceConfigSection device;
+    private transient String sourceDirectory;
+
+    public String getSourceDirectory() {
+        return sourceDirectory;
+    }
+
+    void setSourceDirectory(String sourceDirectory) {
+        this.sourceDirectory = sourceDirectory;
+    }
 
     public ServerConfig getServer() {
         return server;
@@ -44,9 +53,9 @@ public class DriverConfig {
      * 参照 IncubatorController 的 Spring Boot SSL 配置
      */
     public static class ServerConfig {
-        private int port = 443;
+        private int port = 8080;
         private String host = "localhost";
-        private boolean useHttps = true;
+        private boolean useHttps = false;
         private CertificateConfig certificate;
         private TrustStoreConfig trustStore;  // 信任库配置（新增）
         private ClientAuthConfig clientAuth;
@@ -56,6 +65,7 @@ public class DriverConfig {
         private int functionQueueCapacity = 100;
         private int idempotencyCapacity = 10000;
         private int shutdownTimeoutMs = 30000;
+        private boolean allowReplaceCertificateBinding;
 
         public int getPort() {
             return port;
@@ -123,6 +133,8 @@ public class DriverConfig {
         public void setIdempotencyCapacity(int value) { this.idempotencyCapacity = value; }
         public int getShutdownTimeoutMs() { return shutdownTimeoutMs; }
         public void setShutdownTimeoutMs(int value) { this.shutdownTimeoutMs = value; }
+        public boolean isAllowReplaceCertificateBinding() { return allowReplaceCertificateBinding; }
+        public void setAllowReplaceCertificateBinding(boolean value) { this.allowReplaceCertificateBinding = value; }
     }
 
     /**
@@ -207,7 +219,7 @@ public class DriverConfig {
      * 对应 Spring Boot: server.ssl.protocol, server.ssl.ciphers, server.ssl.enabled-protocols
      */
     public static class SslConfig {
-        private String protocol = "TLSv1.3";  // 对应 server.ssl.protocol
+        private String protocol = "TLSv1.2";  // 对应 server.ssl.protocol
         private List<String> enabledProtocols;  // 对应 server.ssl.enabled-protocols
         private List<String> ciphers;  // 对应 server.ssl.ciphers
 

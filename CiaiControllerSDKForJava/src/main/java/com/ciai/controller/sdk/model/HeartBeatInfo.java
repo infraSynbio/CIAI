@@ -19,21 +19,17 @@ public class HeartBeatInfo {
     private String heartBeatTime;
 
     public HeartBeatInfo() {
-        this.heartBeatTime = now();
+        this.heartBeatTime = OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
     }
 
     public HeartBeatInfo(int heartBeatStatus) {
         this.heartBeatStatus = heartBeatStatus;
-        this.heartBeatTime = now();
+        this.heartBeatTime = OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
     }
 
     public HeartBeatInfo(HeartBeatStatus status) {
         this.heartBeatStatus = status.getValue();
-        this.heartBeatTime = now();
-    }
-
-    private static String now() {
-        return OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        this.heartBeatTime = OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
     }
 
     // Static factory methods

@@ -10,3 +10,9 @@ a robot-accessible Nest.
 ```
 
 Then open `http://127.0.0.1:18081/Info`.
+
+Validate the same YAML without creating the driver, connecting hardware, or opening a port:
+
+```bash
+./mvnw -f examples/java-temperature/pom.xml exec:java -Dexec.args="--validate"
+```

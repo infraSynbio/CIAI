@@ -1,8 +1,8 @@
 package com.ciai.controller.sdk.communication;
 
 import com.ciai.controller.sdk.interface_.ICommunication;
+import com.ciai.controller.sdk.logging.LoggerProvider;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -24,7 +24,7 @@ import java.util.Map;
  */
 public class HttpCommunication implements ICommunication, AutoCloseable {
 
-    private static final Logger logger = LoggerFactory.getLogger(HttpCommunication.class);
+    private static final Logger logger = LoggerProvider.createLogger(HttpCommunication.class);
 
     private final String baseUrl;
     private final int timeout;

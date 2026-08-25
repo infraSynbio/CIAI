@@ -2,6 +2,22 @@
 
 All notable changes are documented here. CIAI follows semantic versioning for SDK packages; the wire protocol has its own major-version compatibility rules.
 
+## Unreleased
+
+### Added
+
+- Hardware-free configuration validation reports in both SDKs, including stable YAML paths and safe HTTP defaults.
+- Java `DriverCli` with positional/`--config` paths and `--validate`, plus JAR-relative configuration lookup.
+- Configuration-relative vendor path helpers and ownership-safe Java semaphore compatibility for migrated drivers.
+- A reusable, validated `device-driver-migration` Skill with deterministic inventory, evidence, migration and conformance checks.
+- A machine-readable `application.yml` JSON Schema packaged with both SDK distributions.
+
+### Fixed
+
+- Relative certificate, process adapter and vendor file paths no longer depend on an accidental working directory.
+- HTTP-only startup no longer requires commented HTTPS environment variables.
+- Java transport, callback, lifecycle and logging details now match the .NET implementation more closely.
+
 ## 2.0.0-beta.1 — 2026-08-24
 
 ### Added

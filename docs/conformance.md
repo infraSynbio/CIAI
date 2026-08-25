@@ -16,7 +16,7 @@ Java：
 ./mvnw --batch-mode --no-transfer-progress verify
 ```
 
-两套测试覆盖注解注册、异步返回、错误结果、强类型参数、命名连接、资源限制、TCP帧、Function幂等、429、HTTP方法、取消/进度、动态 Nest 和配置诊断。
+两套测试覆盖注解注册、异步返回、错误结果、强类型参数、命名连接、资源限制、TCP帧、Function幂等、429、HTTP方法、取消/进度、动态 Nest、无硬件配置预检、配置相对路径和发布样例校验；Java还覆盖信号量所有权与许可不膨胀。
 
 ## 驱动符合性等级
 
@@ -40,6 +40,9 @@ Java：
 - 未验证硬件或环境的明确清单。
 
 更详细的审计表见 [conformance-checklist.md](conformance-checklist.md)。
+使用AI从设备文档或旧驱动开始迁移时，遵循
+[device-driver-migration Skill](../.agents/skills/device-driver-migration/SKILL.md) 的证据分级、
+状态成功条件和分层验收流程。
 
 ## 黑盒检查
 

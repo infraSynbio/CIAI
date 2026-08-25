@@ -8,9 +8,9 @@ import com.ciai.controller.sdk.config.DriverConfig;
 import com.ciai.controller.sdk.config.YamlConfigLoader;
 import com.ciai.controller.sdk.core.DeviceConfiguration;
 import com.ciai.controller.sdk.core.DeviceDriverBase;
+import com.ciai.controller.sdk.logging.LoggerProvider;
 import com.ciai.controller.sdk.model.*;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.net.InetSocketAddress;
@@ -35,7 +35,7 @@ import javax.net.ssl.*;
  */
 public class DriverHttpServer implements AutoCloseable {
 
-    private static final Logger logger = LoggerFactory.getLogger(DriverHttpServer.class);
+    private static final Logger logger = LoggerProvider.createLogger(DriverHttpServer.class);
     private static final ObjectMapper objectMapper = new ObjectMapper()
             .setDefaultPropertyInclusion(JsonInclude.Include.ALWAYS)
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
@@ -78,6 +78,8 @@ public class DriverHttpServer implements AutoCloseable {
             return;
         }
 
+        options.validate();
+
         try {
             if (options.isUseHttps()) {
                 startHttpsServer();
@@ -104,18 +106,9 @@ public class DriverHttpServer implements AutoCloseable {
     }
 
     private void startHttpsServer() throws Exception {
-        // 创建SSL上下文 - 使用配置的协议版本
-        // 注意：TLSv1.3 需要 Java 11+，Java 8 使用 TLS 或 TLSv1.2
-        String protocol = options.getProtocol() != null ? options.getProtocol() : "TLS";
-
-        // 尝试使用配置的协议，如果不可用则回退到 TLS
-        SSLContext sslContext;
-        try {
-            sslContext = SSLContext.getInstance(protocol);
-        } catch (java.security.NoSuchAlgorithmException e) {
-            logger.warn("Protocol {} not available, falling back to TLS", protocol);
-            sslContext = SSLContext.getInstance("TLS");
-        }
+        // 配置错误应在启动阶段直接报告，不能静默降级到用户未选择的协议。
+        String protocol = options.getProtocol() != null ? options.getProtocol() : "TLSv1.2";
+        SSLContext sslContext = SSLContext.getInstance(protocol);
 
         // 加载密钥库（服务端证书）
         KeyManagerFactory kmf = loadKeyStore();
@@ -125,7 +118,7 @@ public class DriverHttpServer implements AutoCloseable {
 
         // 初始化SSL上下文
         sslContext.init(kmf.getKeyManagers(), trustManagers, new SecureRandom());
-        validateTlsCapabilities(sslContext);
+        validateTlsConfiguration(sslContext);
 
         // 创建HTTPS服务器
         HttpsServer httpsServer = HttpsServer.create(
@@ -147,7 +140,7 @@ public class DriverHttpServer implements AutoCloseable {
                     sslParameters.setProtocols(options.getEnabledProtocols());
                 }
 
-                // 设置加密套件；空数组使用JVM安全策略。
+                // 仅在用户显式配置时固定套件；默认使用JVM/操作系统安全策略。
                 if (options.getCiphers() != null && options.getCiphers().length > 0) {
                     sslParameters.setCipherSuites(options.getCiphers());
                 }
@@ -181,14 +174,14 @@ public class DriverHttpServer implements AutoCloseable {
                 options.getClientAuth());
     }
 
-    private void validateTlsCapabilities(SSLContext context) {
-        SSLParameters supported = context.getSupportedSSLParameters();
+    private void validateTlsConfiguration(SSLContext sslContext) {
+        SSLParameters supported = sslContext.getSupportedSSLParameters();
         Set<String> supportedProtocols = new HashSet<>(Arrays.asList(supported.getProtocols()));
         if (options.getEnabledProtocols() != null) {
             for (String configured : options.getEnabledProtocols()) {
                 if (!supportedProtocols.contains(configured)) {
-                    throw new IllegalArgumentException("TLS protocol is not supported by this Java runtime: "
-                            + configured + ". Supported values: " + supportedProtocols);
+                    throw new IllegalArgumentException("Unsupported TLS protocol '" + configured
+                            + "'. JVM supports: " + supportedProtocols);
                 }
             }
         }
@@ -197,8 +190,8 @@ public class DriverHttpServer implements AutoCloseable {
         if (options.getCiphers() != null) {
             for (String configured : options.getCiphers()) {
                 if (!supportedCiphers.contains(configured)) {
-                    throw new IllegalArgumentException("TLS cipher is not supported by this Java runtime: "
-                            + configured);
+                    throw new IllegalArgumentException("Unsupported TLS cipher '" + configured
+                            + "' for this JVM");
                 }
             }
         }
@@ -246,9 +239,9 @@ public class DriverHttpServer implements AutoCloseable {
      * 参照 IncubatorController 的 TLSUtils.createSSLContext 实现
      */
     private TrustManager[] createTrustManagers() throws Exception {
-        // 不请求客户端证书时无需自定义信任管理器；使用JVM默认值，避免引入trust-all策略。
+        // 不启用客户端认证时交给JSSE默认信任策略；服务端不会请求客户端证书。
         if (options.getClientAuth() == HttpsOptions.ClientAuthMode.NONE) {
-            logger.info("Client authentication disabled; using JVM default trust managers");
+            logger.info("Client authentication disabled");
             return null;
         }
 

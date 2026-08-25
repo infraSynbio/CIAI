@@ -10,6 +10,10 @@ namespace CiaiControllerSDK.Config
     /// </summary>
     public class DriverConfig
     {
+        /// <summary>application.yml所在目录；由加载器设置，不属于公开YAML契约。</summary>
+        [YamlIgnore]
+        public string SourceDirectory { get; internal set; }
+
         /// <summary>
         /// 服务器配置
         /// </summary>
@@ -40,7 +44,7 @@ namespace CiaiControllerSDK.Config
         /// <summary>
         /// 监听端口
         /// </summary>
-        public int Port { get; set; } = 443;
+        public int Port { get; set; } = 8080;
 
         /// <summary>
         /// 主机名
@@ -48,9 +52,9 @@ namespace CiaiControllerSDK.Config
         public string Host { get; set; } = "localhost";
 
         /// <summary>
-        /// 是否使用HTTPS，默认true
+        /// 是否使用HTTPS，默认false
         /// </summary>
-        public bool UseHttps { get; set; } = true;
+        public bool UseHttps { get; set; }
 
         /// <summary>
         /// 证书配置（密钥库）
@@ -133,10 +137,10 @@ namespace CiaiControllerSDK.Config
     public class SslConfig
     {
         /// <summary>
-        /// SSL协议版本，默认 TLSv1.3
+        /// SSL协议版本，默认 TLSv1.2
         /// 对应 Spring Boot: server.ssl.protocol
         /// </summary>
-        public string Protocol { get; set; } = "TLSv1.3";
+        public string Protocol { get; set; } = "TLSv1.2";
 
         /// <summary>
         /// 启用的协议列表

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CiaiControllerSDK.Core;
 using CiaiControllerSDK.Services;
+using CiaiControllerSDK.WebServer;
 
 namespace CiaiControllerSDK.Config
 {
@@ -23,9 +24,48 @@ namespace CiaiControllerSDK.Config
             Diagnostics = diagnostics.ToArray();
     }
 
+    /// <summary>不连接设备的配置预检结果，可用于安装程序、CI和“检查配置”命令。</summary>
+    public sealed class ConfigurationValidationReport
+    {
+        public string ConfigPath { get; }
+        public IReadOnlyList<ConfigurationDiagnostic> Diagnostics { get; }
+        public bool IsValid => Diagnostics.All(d => d.Severity != DiagnosticSeverity.Error);
+        public bool HasWarnings => Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Warning);
+
+        public ConfigurationValidationReport(string configPath,
+            IEnumerable<ConfigurationDiagnostic> diagnostics)
+        {
+            ConfigPath = configPath;
+            Diagnostics = (diagnostics ?? Array.Empty<ConfigurationDiagnostic>()).ToArray();
+        }
+
+        public void ThrowIfInvalid()
+        {
+            var errors = Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
+            if (errors.Length > 0) throw new ConfigurationValidationException(errors);
+        }
+    }
+
     /// <summary>启动前配置体检，错误精确到YAML路径。</summary>
     public static class ConfigurationValidator
     {
+        public static IReadOnlyList<ConfigurationDiagnostic> Validate(HttpsOptions server,
+            DeviceConfiguration configuration)
+        {
+            var result = new List<ConfigurationDiagnostic>();
+            if (server == null)
+            {
+                result.Add(Error("server", "服务器配置不能为空"));
+            }
+            else
+            {
+                try { server.Validate(); }
+                catch (Exception ex) { result.Add(Error("server", ex.Message)); }
+            }
+            result.AddRange(Validate(configuration));
+            return result;
+        }
+
         public static IReadOnlyList<ConfigurationDiagnostic> Validate(DeviceConfiguration configuration)
         {
             var result = new List<ConfigurationDiagnostic>();
@@ -39,8 +79,15 @@ namespace CiaiControllerSDK.Config
             if (configuration.DeviceCallTimeout <= 0)
                 result.Add(Error("device.deviceCallTimeoutMs", "必须大于0"));
 
+            if (string.IsNullOrWhiteSpace(configuration.DeviceId))
+                result.Add(Warning("device.deviceId", "未配置设备ID；建议为生产设备设置稳定且唯一的ID"));
+
             var connections = configuration.Connections?.Values.ToList() ?? new List<ConnectionConfiguration>();
-            if (connections.Count == 0) return result;
+            if (connections.Count == 0)
+            {
+                ValidateLegacyConnection(configuration, result);
+                return result;
+            }
             if (connections.Count(c => c.IsDefault) > 1)
                 result.Add(Error("device.connections", "只能有一个default连接"));
             foreach (var c in connections)
@@ -60,9 +107,62 @@ namespace CiaiControllerSDK.Config
             return result;
         }
 
+        private static void ValidateLegacyConnection(DeviceConfiguration configuration,
+            ICollection<ConfigurationDiagnostic> result)
+        {
+            if (configuration.CommunicationType == CommunicationType.DLL)
+                return;
+
+            var connection = new ConnectionConfiguration
+            {
+                Name = "default",
+                Type = configuration.CommunicationType switch
+                {
+                    CommunicationType.TCP => "tcp",
+                    CommunicationType.HTTP => "http",
+                    CommunicationType.Serial => "serial",
+                    _ => string.Empty
+                },
+                Host = configuration.Host,
+                Port = configuration.Port,
+                BaseUrl = configuration.BaseUrl,
+                SerialPort = configuration.SerialPort,
+                BaudRate = configuration.BaudRate,
+                DataBits = configuration.DataBits,
+                StopBits = configuration.StopBits,
+                Parity = configuration.Parity,
+                Encoding = configuration.Encoding,
+                FlowControl = configuration.FlowControl,
+                DtrEnable = configuration.DtrEnable,
+                RtsEnable = configuration.RtsEnable,
+                DiscardInputBeforeWrite = configuration.DiscardInputBeforeWrite,
+                ConnectTimeoutMs = configuration.ConnectionTimeout,
+                ReadTimeoutMs = configuration.ReadTimeout,
+                WriteTimeoutMs = configuration.WriteTimeout,
+                ResourceWaitTimeoutMs = configuration.DeviceCallTimeout,
+                MaxConcurrency = 1
+            };
+
+            try
+            {
+                CommunicationProviderRegistry.Validate(connection);
+            }
+            catch (Exception ex)
+            {
+                var section = configuration.CommunicationType.ToString().ToLowerInvariant();
+                result.Add(Error($"device.{section}", ex.Message));
+            }
+        }
+
         public static void ValidateAndThrow(DeviceConfiguration configuration)
         {
             var errors = Validate(configuration).Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
+            if (errors.Length > 0) throw new ConfigurationValidationException(errors);
+        }
+        public static void ValidateAndThrow(HttpsOptions server, DeviceConfiguration configuration)
+        {
+            var errors = Validate(server, configuration)
+                .Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
             if (errors.Length > 0) throw new ConfigurationValidationException(errors);
         }
         private static ConfigurationDiagnostic Error(string path, string message) =>
